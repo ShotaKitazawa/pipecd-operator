@@ -1,0 +1,20 @@
+# permissions for end users to view mongoes.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mongo-viewer-role
+rules:
+- apiGroups:
+  - pipecd.kanatakita.com
+  resources:
+  - mongoes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - pipecd.kanatakita.com
+  resources:
+  - mongoes/status
+  verbs:
+  - get

@@ -1,0 +1,68 @@
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - pipecd.kanatakita.com
+  resources:
+  - controlplanes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - pipecd.kanatakita.com
+  resources:
+  - controlplanes/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - pipecd.kanatakita.com
+  resources:
+  - minios
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - pipecd.kanatakita.com
+  resources:
+  - minios/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - pipecd.kanatakita.com
+  resources:
+  - mongoes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - pipecd.kanatakita.com
+  resources:
+  - mongoes/status
+  verbs:
+  - get
+  - patch
+  - update
