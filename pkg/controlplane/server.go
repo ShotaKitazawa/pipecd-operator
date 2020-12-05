@@ -15,21 +15,21 @@ import (
 const (
 	serverMinReplicas int32 = 1
 
-	serverContainerName                = "server"
-	serverContainerImage               = "gcr.io/pipecd/pipecd"
-	serverContainerPipedServerPortName = "piped-api"
-	serverContainerPipedServerPort     = 9080
-	serverContainerWebServerPortName   = "web-api"
-	serverContainerWebServerPort       = 9081
-	serverContainerHttpPortName        = "http"
-	serverContainerHttpPort            = 9082
-	serverContainerAdminPortName       = "admin"
-	serverContainerAdminPort           = 9085
-	serverContainerHealthPath          = "/healthz"
-	serverContainerConfigName          = "pipecd-config"
-	serverContainerConfigPath          = "/etc/pipecd-config"
-	serverContainerSecretName          = "pipecd-secret"
-	serverContainerSecretPath          = "/etc/pipecd-secret"
+	ServerContainerName                = "server"
+	ServerContainerImage               = "gcr.io/pipecd/pipecd"
+	ServerContainerPipedServerPortName = "piped-api"
+	ServerContainerPipedServerPort     = 9080
+	ServerContainerWebServerPortName   = "web-api"
+	ServerContainerWebServerPort       = 9081
+	ServerContainerHttpPortName        = "http"
+	ServerContainerHttpPort            = 9082
+	ServerContainerAdminPortName       = "admin"
+	ServerContainerAdminPort           = 9085
+	ServerContainerHealthPath          = "/healthz"
+	ServerContainerConfigName          = "pipecd-config"
+	ServerContainerConfigPath          = "/etc/pipecd-config"
+	ServerContainerSecretName          = "pipecd-secret"
+	ServerContainerSecretPath          = "/etc/pipecd-secret"
 
 	serverServicePipedServerPort     = 9080
 	serverServicePipedServerPortName = "piped-server"
@@ -49,6 +49,7 @@ var (
 		"--enable-grpc-reflection=false",
 		"--encryption-key-file=/etc/pipecd-secret/encryption-key",
 		"--log-encoding=humanize",
+		"--enable-grpc-reflection=true", // TODO: for debug
 	}
 )
 
@@ -81,11 +82,11 @@ func MakeServerDeploymentSpec(
 	return appsv1.DeploymentSpec{
 		Replicas: &replicas,
 		Selector: &metav1.LabelSelector{
-			MatchLabels: generateServerLabel(c.Name),
+			MatchLabels: generateServerLabel(),
 		},
 		Template: v1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: generateServerLabel(c.Name),
+				Labels: generateServerLabel(),
 			},
 			Spec: podSpec,
 		},
@@ -103,57 +104,57 @@ func MakeServerPodSpec(
 	return v1.PodSpec{
 		Containers: []corev1.Container{
 			{
-				Name:            serverContainerName,
-				Image:           fmt.Sprintf("%s:%s", serverContainerImage, c.Spec.Version),
+				Name:            ServerContainerName,
+				Image:           fmt.Sprintf("%s:%s", ServerContainerImage, c.Spec.Version),
 				ImagePullPolicy: v1.PullIfNotPresent,
 				Args:            args,
 				Ports: []v1.ContainerPort{
 					{
-						Name:          serverContainerPipedServerPortName,
-						ContainerPort: serverContainerPipedServerPort,
+						Name:          ServerContainerPipedServerPortName,
+						ContainerPort: ServerContainerPipedServerPort,
 						Protocol:      v1.ProtocolTCP,
 					},
 					{
-						Name:          serverContainerWebServerPortName,
-						ContainerPort: serverContainerWebServerPort,
+						Name:          ServerContainerWebServerPortName,
+						ContainerPort: ServerContainerWebServerPort,
 						Protocol:      v1.ProtocolTCP,
 					},
 					{
-						Name:          serverContainerHttpPortName,
-						ContainerPort: serverContainerHttpPort,
+						Name:          ServerContainerHttpPortName,
+						ContainerPort: ServerContainerHttpPort,
 						Protocol:      v1.ProtocolTCP,
 					},
 					{
-						Name:          serverContainerAdminPortName,
-						ContainerPort: serverContainerAdminPort,
+						Name:          ServerContainerAdminPortName,
+						ContainerPort: ServerContainerAdminPort,
 						Protocol:      v1.ProtocolTCP,
 					},
 				},
 				LivenessProbe: &v1.Probe{
 					Handler: v1.Handler{
 						HTTPGet: &v1.HTTPGetAction{
-							Path: serverContainerHealthPath,
-							Port: intstr.FromString(serverContainerAdminPortName),
+							Path: ServerContainerHealthPath,
+							Port: intstr.FromString(ServerContainerAdminPortName),
 						},
 					},
 				},
 				ReadinessProbe: &v1.Probe{
 					Handler: v1.Handler{
 						HTTPGet: &v1.HTTPGetAction{
-							Path: serverContainerHealthPath,
-							Port: intstr.FromString(serverContainerAdminPortName),
+							Path: ServerContainerHealthPath,
+							Port: intstr.FromString(ServerContainerAdminPortName),
 						},
 					},
 				},
 				VolumeMounts: []v1.VolumeMount{
 					{
-						Name:      serverContainerConfigName,
-						MountPath: serverContainerConfigPath,
+						Name:      ServerContainerConfigName,
+						MountPath: ServerContainerConfigPath,
 						ReadOnly:  true,
 					},
 					{
-						Name:      serverContainerSecretName,
-						MountPath: serverContainerSecretPath,
+						Name:      ServerContainerSecretName,
+						MountPath: ServerContainerSecretPath,
 						ReadOnly:  true,
 					},
 				},
@@ -161,7 +162,7 @@ func MakeServerPodSpec(
 		},
 		Volumes: []v1.Volume{
 			{
-				Name: serverContainerConfigName,
+				Name: ServerContainerConfigName,
 				VolumeSource: v1.VolumeSource{
 					ConfigMap: &v1.ConfigMapVolumeSource{
 						LocalObjectReference: v1.LocalObjectReference{
@@ -171,7 +172,7 @@ func MakeServerPodSpec(
 				},
 			},
 			{
-				Name: serverContainerSecretName,
+				Name: ServerContainerSecretName,
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
 						SecretName: c.Spec.Secret.SecretName,
@@ -191,33 +192,32 @@ func MakeServerServiceSpec(
 			{
 				Name:       serverServicePipedServerPortName,
 				Port:       serverServicePipedServerPort,
-				TargetPort: intstr.FromString(serverContainerPipedServerPortName),
+				TargetPort: intstr.FromString(ServerContainerPipedServerPortName),
 			},
 			{
 				Name:       serverServiceWebServerPortName,
 				Port:       serverServiceWebServerPort,
-				TargetPort: intstr.FromString(serverContainerWebServerPortName),
+				TargetPort: intstr.FromString(ServerContainerWebServerPortName),
 			},
 			{
 				Name:       serverServiceHttpPortName,
 				Port:       serverServiceHttpPort,
-				TargetPort: intstr.FromString(serverContainerHttpPortName),
+				TargetPort: intstr.FromString(ServerContainerHttpPortName),
 			},
 			{
 				Name:       serverServiceAdminPortName,
 				Port:       serverServiceAdminPort,
-				TargetPort: intstr.FromString(serverContainerAdminPortName),
+				TargetPort: intstr.FromString(ServerContainerAdminPortName),
 			},
 		},
-		Selector: generateServerLabel(c.Name),
+		Selector: generateServerLabel(),
 	}, nil
 }
 
-func generateServerLabel(name string) map[string]string {
+func generateServerLabel() map[string]string {
 	return map[string]string{
 		"app.kubernetes.io/name":      "pipecd",
 		"app.kubernetes.io/instance":  "pipecd",
 		"app.kubernetes.io/component": "server",
-		"name":                        name,
 	}
 }

@@ -55,11 +55,11 @@ func MakeCacheDeploymentSpec(
 	return appsv1.DeploymentSpec{
 		Replicas: &replicas,
 		Selector: &metav1.LabelSelector{
-			MatchLabels: generateCacheLabel(c.Name),
+			MatchLabels: generateCacheLabel(),
 		},
 		Template: v1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: generateCacheLabel(c.Name),
+				Labels: generateCacheLabel(),
 			},
 			Spec: podSpec,
 		},
@@ -107,15 +107,14 @@ func MakeCacheServiceSpec(
 				TargetPort: intstr.FromString(cacheContainerPortName),
 			},
 		},
-		Selector: generateCacheLabel(c.Name),
+		Selector: generateCacheLabel(),
 	}, nil
 }
 
-func generateCacheLabel(name string) map[string]string {
+func generateCacheLabel() map[string]string {
 	return map[string]string{
 		"app.kubernetes.io/name":      "pipecd",
 		"app.kubernetes.io/instance":  "pipecd",
 		"app.kubernetes.io/component": "cache",
-		"name":                        name,
 	}
 }

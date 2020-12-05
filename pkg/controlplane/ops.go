@@ -49,7 +49,6 @@ func MakeOpsNamespacedName(name, namespace string) types.NamespacedName {
 
 func MakeOpsDeploymentSpec(
 	c pipecdv1alpha1.ControlPlane,
-	inputHash string,
 ) (appsv1.DeploymentSpec, error) {
 	var replicas int32
 	if c.Spec.ReplicasOps == nil {
@@ -70,11 +69,11 @@ func MakeOpsDeploymentSpec(
 	return appsv1.DeploymentSpec{
 		Replicas: &replicas,
 		Selector: &metav1.LabelSelector{
-			MatchLabels: generateOpsLabel(c.Name),
+			MatchLabels: generateOpsLabel(),
 		},
 		Template: v1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: generateOpsLabel(c.Name),
+				Labels: generateOpsLabel(),
 			},
 			Spec: podSpec,
 		},
@@ -174,15 +173,14 @@ func MakeOpsServiceSpec(
 				TargetPort: intstr.FromString(opsContainerAdminPortName),
 			},
 		},
-		Selector: generateOpsLabel(c.Name),
+		Selector: generateOpsLabel(),
 	}, nil
 }
 
-func generateOpsLabel(name string) map[string]string {
+func generateOpsLabel() map[string]string {
 	return map[string]string{
 		"app.kubernetes.io/name":      "pipecd",
 		"app.kubernetes.io/instance":  "pipecd",
 		"app.kubernetes.io/component": "ops",
-		"name":                        name,
 	}
 }

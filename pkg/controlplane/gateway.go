@@ -52,7 +52,6 @@ func MakeGatewayNamespacedName(name, namespace string) types.NamespacedName {
 
 func MakeGatewayDeploymentSpec(
 	c pipecdv1alpha1.ControlPlane,
-	inputHash string,
 ) (appsv1.DeploymentSpec, error) {
 	var replicas int32
 	if c.Spec.ReplicasGateway == nil {
@@ -73,11 +72,11 @@ func MakeGatewayDeploymentSpec(
 	return appsv1.DeploymentSpec{
 		Replicas: &replicas,
 		Selector: &metav1.LabelSelector{
-			MatchLabels: generateGatewayLabel(c.Name),
+			MatchLabels: generateGatewayLabel(),
 		},
 		Template: v1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: generateGatewayLabel(c.Name),
+				Labels: generateGatewayLabel(),
 			},
 			Spec: podSpec,
 		},
@@ -184,7 +183,7 @@ func MakeGatewayServiceSpec(
 				TargetPort: intstr.FromString(gatewayContainerPortCPName),
 			},
 		},
-		Selector: generateGatewayLabel(c.Name),
+		Selector: generateGatewayLabel(),
 	}, nil
 }
 
@@ -213,11 +212,10 @@ func MakeGatewayConfigMapBinaryData(
 	return data, nil
 }
 
-func generateGatewayLabel(name string) map[string]string {
+func generateGatewayLabel() map[string]string {
 	return map[string]string{
 		"app.kubernetes.io/name":      "pipecd",
 		"app.kubernetes.io/instance":  "pipecd",
 		"app.kubernetes.io/component": "gateway",
-		"name":                        name,
 	}
 }

@@ -3,5 +3,10 @@ kind: Environment
 metadata:
   name: environment-sample
 spec:
-  # Add fields here
-  foo: bar
+  name: test
+  description: test
+  projectID: quickstart
+  insecure: true
+  encryptionKeyRef:
+    secretName: secret-sample
+    key: encryption-key

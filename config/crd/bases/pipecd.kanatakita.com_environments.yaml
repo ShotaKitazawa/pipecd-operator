@@ -34,10 +34,35 @@ spec:
         spec:
           description: EnvironmentSpec defines the desired state of Environment
           properties:
-            foo:
-              description: Foo is an example field of Environment. Edit Environment_types.go
-                to remove/update
+            description:
               type: string
+            encryptionKeyRef:
+              properties:
+                key:
+                  description: The key of the secret to select from.  Must be a valid
+                    secret key.
+                  type: string
+                optional:
+                  description: Specify whether the Secret or its key must be defined
+                  type: boolean
+                secretName:
+                  description: The name of the secret in the pod's namespace to select
+                    from.
+                  type: string
+              required:
+              - key
+              - secretName
+              type: object
+            insecure:
+              type: boolean
+            name:
+              type: string
+            projectID:
+              type: string
+          required:
+          - description
+          - name
+          - projectID
           type: object
         status:
           description: EnvironmentStatus defines the observed state of Environment
