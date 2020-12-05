@@ -29,6 +29,26 @@ rules:
 - apiGroups:
   - pipecd.kanatakita.com
   resources:
+  - environments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - pipecd.kanatakita.com
+  resources:
+  - environments/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - pipecd.kanatakita.com
+  resources:
   - minios
   verbs:
   - create

@@ -227,11 +227,6 @@ spec:
               description: version of docker.io/redis
               format: string
               type: string
-            replicasApi:
-              description: number of replicas of api
-              format: int32
-              minimum: 0
-              type: integer
             replicasCache:
               description: number of replicas of cache
               format: int32
@@ -247,8 +242,8 @@ spec:
               format: int32
               minimum: 0
               type: integer
-            replicasWeb:
-              description: number of replicas of web
+            replicasServer:
+              description: number of replicas of server
               format: int32
               minimum: 0
               type: integer
@@ -315,10 +310,6 @@ spec:
         status:
           description: ControlPlaneStatus defines the observed state of ControlPlane
           properties:
-            availableApiReplicas:
-              description: this is equal deployment.status.availableReplicas of api
-              format: int32
-              type: integer
             availableCacheReplicas:
               description: this is equal deployment.status.availableReplicas of cache
               format: int32
@@ -335,17 +326,16 @@ spec:
               description: this is equal deployment.status.availableReplicas of ops
               format: int32
               type: integer
-            availableWebReplicas:
-              description: this is equal deployment.status.availableReplicas of web
+            availableServerReplicas:
+              description: this is equal deployment.status.availableReplicas of server
               format: int32
               type: integer
           required:
-          - availableApiReplicas
           - availableCacheReplicas
           - availableGatewayReplicas
           - availableMinioReplicas
           - availableOpsReplicas
-          - availableWebReplicas
+          - availableServerReplicas
           type: object
       type: object
   version: v1alpha1

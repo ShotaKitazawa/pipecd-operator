@@ -16,12 +16,16 @@ const (
 	opsMinReplicas int32 = 1
 
 	opsContainerName          = "ops"
-	opsContainerImage         = "gcr.io/pipecd/ops"
+	opsContainerImage         = "gcr.io/pipecd/pipecd"
 	opsContainerOpsPortName   = "ops"
 	opsContainerOpsPort       = 9082
 	opsContainerAdminPortName = "admin"
 	opsContainerAdminPort     = 9085
 	opsContainerHealthPath    = "/healthz"
+	opsContainerConfigName    = "pipecd-config"
+	opsContainerConfigPath    = "/etc/pipecd-config"
+	opsContainerSecretName    = "pipecd-secret"
+	opsContainerSecretPath    = "/etc/pipecd-secret"
 
 	opsServiceOpsPort       = 9082
 	opsServiceOpsPortName   = "piped-ops"
@@ -31,7 +35,7 @@ const (
 
 var (
 	opsContainerArgs = []string{
-		"server",
+		"ops",
 		"--config-file=/etc/pipecd-config/control-plane-config.yaml",
 	}
 )
@@ -118,8 +122,13 @@ func MakeOpsPodSpec(
 				},
 				VolumeMounts: []v1.VolumeMount{
 					{
-						Name:      apiContainerConfigName,
-						MountPath: apiContainerConfigPath,
+						Name:      opsContainerConfigName,
+						MountPath: opsContainerConfigPath,
+						ReadOnly:  true,
+					},
+					{
+						Name:      opsContainerSecretName,
+						MountPath: opsContainerSecretPath,
 						ReadOnly:  true,
 					},
 				},
@@ -127,12 +136,20 @@ func MakeOpsPodSpec(
 		},
 		Volumes: []v1.Volume{
 			{
-				Name: apiContainerConfigName,
+				Name: opsContainerConfigName,
 				VolumeSource: v1.VolumeSource{
 					ConfigMap: &v1.ConfigMapVolumeSource{
 						LocalObjectReference: v1.LocalObjectReference{
 							Name: ConfigMapName,
 						},
+					},
+				},
+			},
+			{
+				Name: opsContainerSecretName,
+				VolumeSource: v1.VolumeSource{
+					Secret: &v1.SecretVolumeSource{
+						SecretName: c.Spec.Secret.SecretName,
 					},
 				},
 			},

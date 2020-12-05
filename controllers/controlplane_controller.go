@@ -127,23 +127,13 @@ func (r *ControlPlaneReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 			return ctrl.Result{}, err
 		}
 	}
-	{ // api
+	{ // server
 		wg.Add(1)
 		errStreamApi := make(chan error)
-		go r.reconcileApi(ctx, &wg, errStreamApi, &cp)
+		go r.reconcileServer(ctx, &wg, errStreamApi, &cp)
 		select {
 		case <-terminated:
 		case err = <-errStreamApi:
-			return ctrl.Result{}, err
-		}
-	}
-	{ // web
-		wg.Add(1)
-		errStreamWeb := make(chan error)
-		go r.reconcileWeb(ctx, &wg, errStreamWeb, &cp)
-		select {
-		case <-terminated:
-		case err = <-errStreamWeb:
 			return ctrl.Result{}, err
 		}
 	}
@@ -346,26 +336,26 @@ func (r *ControlPlaneReconciler) reconcileGateway(ctx context.Context, wg *sync.
 	}
 }
 
-func (r *ControlPlaneReconciler) reconcileApi(ctx context.Context, wg *sync.WaitGroup, errStream chan<- error, cp *pipecdv1alpha1.ControlPlane) {
+func (r *ControlPlaneReconciler) reconcileServer(ctx context.Context, wg *sync.WaitGroup, errStream chan<- error, cp *pipecdv1alpha1.ControlPlane) {
 	defer (*wg).Done()
-	log := r.Log.WithValues("component", "api")
-	apiNN := controlplane.MakeApiNamespacedName(cp.Name, cp.Namespace)
+	log := r.Log.WithValues("component", "server")
+	serverNN := controlplane.MakeServerNamespacedName(cp.Name, cp.Namespace)
 
-	/* Generate api Deployment (NamespacedName) */
-	apiDeployment := &appsv1.Deployment{
+	/* Generate server Deployment (NamespacedName) */
+	serverDeployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      apiNN.Name,
-			Namespace: apiNN.Namespace,
+			Name:      serverNN.Name,
+			Namespace: serverNN.Namespace,
 		},
 	}
 
-	/* Apply api Deployment */
-	if _, err := ctrl.CreateOrUpdate(ctx, r, apiDeployment, func() (err error) {
-		apiDeployment.Spec, err = controlplane.MakeApiDeploymentSpec(*cp, "inputHash_TODO")
+	/* Apply server Deployment */
+	if _, err := ctrl.CreateOrUpdate(ctx, r, serverDeployment, func() (err error) {
+		serverDeployment.Spec, err = controlplane.MakeServerDeploymentSpec(*cp)
 		if err != nil {
 			return err
 		}
-		if err := ctrl.SetControllerReference(cp, apiDeployment, r.Scheme); err != nil {
+		if err := ctrl.SetControllerReference(cp, serverDeployment, r.Scheme); err != nil {
 			log.Error(err, "unable to set ownerReference from ControlPlane to Deployment")
 			return err
 		}
@@ -376,137 +366,52 @@ func (r *ControlPlaneReconciler) reconcileApi(ctx context.Context, wg *sync.Wait
 		return
 	}
 
-	/* Get api Deployment from cluster */
-	var apiDeploymentApplied appsv1.Deployment
-	if err := r.Get(ctx, client.ObjectKey{Namespace: apiDeployment.Namespace, Name: apiDeployment.Name}, &apiDeploymentApplied); err != nil {
+	/* Get server Deployment from cluster */
+	var serverDeploymentApplied appsv1.Deployment
+	if err := r.Get(ctx, client.ObjectKey{Namespace: serverDeployment.Namespace, Name: serverDeployment.Name}, &serverDeploymentApplied); err != nil {
 		log.Error(err, "unable to fetch Deployment")
 		errStream <- client.IgnoreNotFound(err)
 		return
 	}
 
-	/* Update status api Deployment */
-	availableReplicas := apiDeploymentApplied.Status.AvailableReplicas
-	if availableReplicas != cp.Status.AvailableApiReplicas {
-		cp.Status.AvailableApiReplicas = availableReplicas
+	/* Update status server Deployment */
+	availableReplicas := serverDeploymentApplied.Status.AvailableReplicas
+	if availableReplicas != cp.Status.AvailableServerReplicas {
+		cp.Status.AvailableServerReplicas = availableReplicas
 		if err := r.Status().Update(ctx, cp); err != nil {
 			log.Error(err, "unable to update ControlPlane status")
 			errStream <- err
 			return
 		}
 		/* Record to event */
-		r.Recorder.Eventf(cp, corev1.EventTypeNormal, "Updated", "Update controlPlane.Status.AvailableApiReplicas: %d", cp.Status.AvailableApiReplicas)
+		r.Recorder.Eventf(cp, corev1.EventTypeNormal, "Updated", "Update controlPlane.Status.AvailableServerReplicas: %d", cp.Status.AvailableServerReplicas)
 	}
 
-	/* Generate api Service (NamespacedName) */
-	apiService := &v1.Service{
+	/* Generate server Service (NamespacedName) */
+	serverService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      apiNN.Name,
-			Namespace: apiNN.Namespace,
+			Name:      serverNN.Name,
+			Namespace: serverNN.Namespace,
 		},
 	}
 
-	/* Apply api Service */
-	if _, err := ctrl.CreateOrUpdate(ctx, r, apiService, func() (err error) {
-		apiService.Spec, err = controlplane.MakeApiServiceSpec(*cp)
+	/* Apply server Service */
+	if _, err := ctrl.CreateOrUpdate(ctx, r, serverService, func() (err error) {
+		serverService.Spec, err = controlplane.MakeServerServiceSpec(*cp)
 		if err != nil {
 			return err
 		}
-		if err := ctrl.SetControllerReference(cp, apiService, r.Scheme); err != nil {
+		if err := ctrl.SetControllerReference(cp, serverService, r.Scheme); err != nil {
 			log.Error(err, "unable to set ownerReference from ControlPlane to Service")
 			return err
 		}
 		/* Get gateway Service from cluster */
-		var apiServiceApplied v1.Service
-		if err := r.Get(ctx, client.ObjectKey{Namespace: apiService.Namespace, Name: apiService.Name}, &apiServiceApplied); err != nil {
+		var serverServiceApplied v1.Service
+		if err := r.Get(ctx, client.ObjectKey{Namespace: serverService.Namespace, Name: serverService.Name}, &serverServiceApplied); err != nil {
 			// if does not exist, skip
 			return nil
 		}
-		apiService.Spec.ClusterIP = apiServiceApplied.Spec.ClusterIP
-
-		return nil
-	}); err != nil {
-		log.Error(err, "unable to ensure Service is correct")
-		errStream <- err
-		return
-	}
-}
-
-func (r *ControlPlaneReconciler) reconcileWeb(ctx context.Context, wg *sync.WaitGroup, errStream chan<- error, cp *pipecdv1alpha1.ControlPlane) {
-	defer (*wg).Done()
-	log := r.Log.WithValues("component", "web")
-	webNN := controlplane.MakeWebNamespacedName(cp.Name, cp.Namespace)
-
-	/* Generate web Deployment (NamespacedName) */
-	webDeployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      webNN.Name,
-			Namespace: webNN.Namespace,
-		},
-	}
-
-	/* Apply web Deployment */
-	if _, err := ctrl.CreateOrUpdate(ctx, r, webDeployment, func() (err error) {
-		webDeployment.Spec, err = controlplane.MakeWebDeploymentSpec(*cp, "inputHash_TODO")
-		if err != nil {
-			return err
-		}
-		if err := ctrl.SetControllerReference(cp, webDeployment, r.Scheme); err != nil {
-			log.Error(err, "unable to set ownerReference from ControlPlane to Deployment")
-			return err
-		}
-		return nil
-	}); err != nil {
-		log.Error(err, "unable to ensure deployment is correct")
-		errStream <- err
-		return
-	}
-
-	/* Get web Deployment from cluster */
-	var webDeploymentApplied appsv1.Deployment
-	if err := r.Get(ctx, client.ObjectKey{Namespace: webDeployment.Namespace, Name: webDeployment.Name}, &webDeploymentApplied); err != nil {
-		log.Error(err, "unable to fetch Deployment")
-		errStream <- client.IgnoreNotFound(err)
-		return
-	}
-
-	/* Update status web Deployment */
-	availableReplicas := webDeploymentApplied.Status.AvailableReplicas
-	if availableReplicas != cp.Status.AvailableWebReplicas {
-		cp.Status.AvailableWebReplicas = availableReplicas
-		if err := r.Status().Update(ctx, cp); err != nil {
-			log.Error(err, "unable to update ControlPlane status")
-			errStream <- err
-			return
-		}
-		/* Record to event */
-		r.Recorder.Eventf(cp, corev1.EventTypeNormal, "Updated", "Update controlPlane.Status.AvailableWebReplicas: %d", cp.Status.AvailableWebReplicas)
-	}
-
-	/* Generate web Service (NamespacedName) */
-	webService := &v1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      webNN.Name,
-			Namespace: webNN.Namespace,
-		},
-	}
-
-	/* Apply web Service */
-	if _, err := ctrl.CreateOrUpdate(ctx, r, webService, func() (err error) {
-		webService.Spec, err = controlplane.MakeWebServiceSpec(*cp)
-		if err != nil {
-			return err
-		}
-		if err := ctrl.SetControllerReference(cp, webService, r.Scheme); err != nil {
-			log.Error(err, "unable to set ownerReference from ControlPlane to Service")
-			return err
-		}
-		/* Get gateway Service from cluster */
-		var webServiceApplied v1.Service
-		if err := r.Get(ctx, client.ObjectKey{Namespace: webService.Namespace, Name: webService.Name}, &webServiceApplied); err != nil {
-			// if does not exist, skip
-			return nil
-		}
-		webService.Spec.ClusterIP = webServiceApplied.Spec.ClusterIP
+		serverService.Spec.ClusterIP = serverServiceApplied.Spec.ClusterIP
 
 		return nil
 	}); err != nil {

@@ -205,8 +205,7 @@ func MakeGatewayConfigMapBinaryData(
 		}
 
 		bStr := string(b)
-		bStr = strings.ReplaceAll(bStr, "ADDRESS_API", MakeApiNamespacedName(c.Name, c.Namespace).Name)
-		bStr = strings.ReplaceAll(bStr, "ADDRESS_WEB", MakeWebNamespacedName(c.Name, c.Namespace).Name)
+		bStr = strings.ReplaceAll(bStr, "ADDRESS_SERVER", MakeServerNamespacedName(c.Name, c.Namespace).Name)
 
 		data[filepath.Base(filename)] = []byte(bStr)
 	}

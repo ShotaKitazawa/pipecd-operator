@@ -19,14 +19,8 @@ type ControlPlaneSpec struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Minimum=0
 
-	// number of replicas of api
-	ReplicasApi *int32 `json:"replicasApi,omitempty"`
-
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Minimum=0
-
-	// number of replicas of web
-	ReplicasWeb *int32 `json:"replicasWeb,omitempty"`
+	// number of replicas of server
+	ReplicasServer *int32 `json:"replicasServer,omitempty"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Minimum=0
@@ -408,11 +402,8 @@ type ControlPlaneStatus struct {
 	// this is equal deployment.status.availableReplicas of gateway
 	AvailableGatewayReplicas int32 `json:"availableGatewayReplicas"`
 
-	// this is equal deployment.status.availableReplicas of api
-	AvailableApiReplicas int32 `json:"availableApiReplicas"`
-
-	// this is equal deployment.status.availableReplicas of web
-	AvailableWebReplicas int32 `json:"availableWebReplicas"`
+	// this is equal deployment.status.availableReplicas of server
+	AvailableServerReplicas int32 `json:"availableServerReplicas"`
 
 	// this is equal deployment.status.availableReplicas of cache
 	AvailableCacheReplicas int32 `json:"availableCacheReplicas"`
