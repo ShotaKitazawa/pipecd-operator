@@ -1,0 +1,7 @@
+apiVersion: pipecd.kanatakita.com/v1alpha1
+kind: Piped
+metadata:
+  name: piped-sample
+spec:
+  # Add fields here
+  foo: bar

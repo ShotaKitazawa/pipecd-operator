@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -20,7 +19,7 @@ import (
 	"github.com/ShotaKitazawa/pipecd-operator/pkg/controlplane"
 )
 
-var reconcileTimeoutSecond = 30 * time.Second
+// var reconcileTimeoutSecond = 30 * time.Second
 
 // ControlPlaneReconciler reconciles a ControlPlane object
 type ControlPlaneReconciler struct {

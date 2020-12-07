@@ -86,3 +86,23 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - pipecd.kanatakita.com
+  resources:
+  - pipeds
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - pipecd.kanatakita.com
+  resources:
+  - pipeds/status
+  verbs:
+  - get
+  - patch
+  - update
