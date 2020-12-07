@@ -265,7 +265,7 @@ func (r *ControlPlaneReconciler) reconcileGateway(ctx context.Context, wg *sync.
 
 	/* Apply gateway Deployment */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, gatewayDeployment, func() (err error) {
-		gatewayDeployment.Spec, err = controlplane.MakeGatewayDeploymentSpec(*cp, "inputHash_TODO")
+		gatewayDeployment.Spec, err = controlplane.MakeGatewayDeploymentSpec(*cp)
 		if err != nil {
 			return err
 		}
@@ -521,7 +521,7 @@ func (r *ControlPlaneReconciler) reconcileOps(ctx context.Context, wg *sync.Wait
 
 	/* Apply ops Deployment */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, opsDeployment, func() (err error) {
-		opsDeployment.Spec, err = controlplane.MakeOpsDeploymentSpec(*cp, "inputHash_TODO")
+		opsDeployment.Spec, err = controlplane.MakeOpsDeploymentSpec(*cp)
 		if err != nil {
 			return err
 		}

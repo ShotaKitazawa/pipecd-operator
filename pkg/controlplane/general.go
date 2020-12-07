@@ -53,6 +53,6 @@ func MakeServiceSpec(
 				TargetPort: intstr.FromString(gatewayContainerPortDPName),
 			},
 		},
-		Selector: generateGatewayLabel(c.Name),
+		Selector: generateGatewayLabel(),
 	}, nil
 }
