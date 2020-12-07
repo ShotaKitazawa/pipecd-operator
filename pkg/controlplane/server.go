@@ -16,7 +16,7 @@ const (
 	serverMinReplicas int32 = 1
 
 	ServerContainerName                = "server"
-	ServerContainerImage               = "gcr.io/pipecd/pipecd"
+	ServerContainerImage               = "gcr.io/pipecd/server"
 	ServerContainerPipedServerPortName = "piped-api"
 	ServerContainerPipedServerPort     = 9080
 	ServerContainerWebServerPortName   = "web-api"
@@ -46,10 +46,9 @@ var (
 		"server",
 		"--insecure-cookie=true",
 		"--config-file=/etc/pipecd-config/control-plane-config.yaml",
-		"--enable-grpc-reflection=false",
+		"--enable-grpc-reflection=true",
 		"--encryption-key-file=/etc/pipecd-secret/encryption-key",
 		"--log-encoding=humanize",
-		"--enable-grpc-reflection=true", // TODO: for debug
 	}
 )
 

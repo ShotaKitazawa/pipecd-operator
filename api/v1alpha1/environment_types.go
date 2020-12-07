@@ -18,30 +18,13 @@ type EnvironmentSpec struct {
 
 	ProjectID string `json:"projectID"`
 
+	// +kubebuilder:validation:Required
+
+	EncryptionKeyRef EmbeddedSecretKeySelector `json:"encryptionKeyRef"`
+
 	// +kubebuilder:validation:Optional
 
 	Insecure bool `json:"insecure"`
-
-	// +kubebuilder:validation:Optional
-
-	EncryptionKeyRef EmbeddedSecretKeySelector `json:"encryptionKeyRef"`
-}
-
-type EmbeddedSecretKeySelector struct {
-	// +kubebuilder:validation:Required
-
-	// The name of the secret in the pod's namespace to select from.
-	SecretName string `json:"secretName"`
-
-	// +kubebuilder:validation:Required
-
-	// The key of the secret to select from.  Must be a valid secret key.
-	Key string `json:"key"`
-
-	// +kubebuilder:validation:Optional
-
-	// Specify whether the Secret or its key must be defined
-	Optional *bool `json:"optional,omitempty"`
 }
 
 // EnvironmentStatus defines the observed state of Environment

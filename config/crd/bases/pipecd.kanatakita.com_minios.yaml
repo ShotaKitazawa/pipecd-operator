@@ -266,6 +266,8 @@ spec:
               description: this is equal deployment.status.availableReplicas of mongodb
               format: int32
               type: integer
+          required:
+          - availableReplicas
           type: object
       type: object
   version: v1alpha1

@@ -219,10 +219,6 @@ spec:
               description: version of github.com/envoyproxy/envoy
               format: string
               type: string
-            minioVersion:
-              description: version of docker.io/minio/minio
-              format: string
-              type: string
             redisVersion:
               description: version of docker.io/redis
               format: string
@@ -304,6 +300,7 @@ spec:
               format: string
               type: string
           required:
+          - config
           - secret
           - version
           type: object

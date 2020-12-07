@@ -16,7 +16,7 @@ const (
 	opsMinReplicas int32 = 1
 
 	opsContainerName          = "ops"
-	opsContainerImage         = "gcr.io/pipecd/pipecd"
+	opsContainerImage         = "gcr.io/pipecd/ops"
 	opsContainerOpsPortName   = "ops"
 	opsContainerOpsPort       = 9082
 	opsContainerAdminPortName = "admin"
@@ -35,7 +35,7 @@ const (
 
 var (
 	opsContainerArgs = []string{
-		"ops",
+		"server",
 		"--config-file=/etc/pipecd-config/control-plane-config.yaml",
 	}
 )

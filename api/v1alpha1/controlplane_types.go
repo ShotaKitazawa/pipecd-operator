@@ -52,16 +52,10 @@ type ControlPlaneSpec struct {
 	// version of docker.io/redis
 	RedisVersion string `json:"redisVersion"`
 
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Format:=string
-
-	// version of docker.io/minio/minio
-	MinioVersion string `json:"minioVersion"`
-
 	// secret for PipeCD EncryptionKey & Minio AccessKey and SecretKey
 	Secret *v1.SecretVolumeSource `json:"secret"`
 
-	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Required
 
 	// Config is ControlPlane configuration of PipeCD
 	Config ControlPlaneConfigSpec `json:"config"`
@@ -317,8 +311,6 @@ type FileStoreMinioConfig struct {
 type ControlPlaneCache struct {
 	TTL int64 `json:"ttl"`
 }
-
-//type Duration time.Duration
 
 type ControlPlaneProject struct {
 
