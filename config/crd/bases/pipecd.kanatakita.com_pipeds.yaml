@@ -15,6 +15,8 @@ spec:
     plural: pipeds
     singular: piped
   scope: Namespaced
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       description: Piped is the Schema for the pipeds API
@@ -420,8 +422,12 @@ spec:
               description: this is equal deployment.status.availableReplicas of piped
               format: int32
               type: integer
+            pipedID:
+              description: Piped ID
+              type: string
           required:
           - availableReplicas
+          - pipedID
           type: object
       type: object
   version: v1alpha1

@@ -497,6 +497,12 @@ type AnalysisProviderStackdriverConfig struct {
 type PipedStatus struct {
 	// this is equal deployment.status.availableReplicas of piped
 	AvailableReplicas int32 `json:"availableReplicas"`
+
+	// Environment ID
+	EnvironmentId string `json:"environmentID"`
+
+	// Piped ID
+	PipedId string `json:"pipedID"`
 }
 
 type Notifications struct {
@@ -599,6 +605,7 @@ type NotificationReceiverWebhook struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 
 // Piped is the Schema for the pipeds API
 type Piped struct {
