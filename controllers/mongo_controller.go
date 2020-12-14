@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	pipecdv1alpha1 "github.com/ShotaKitazawa/pipecd-operator/api/v1alpha1"
-	"github.com/ShotaKitazawa/pipecd-operator/pkg/mongo"
+	"github.com/ShotaKitazawa/pipecd-operator/pkg/object"
 )
 
 // MongoReconciler reconciles a Mongo object
@@ -75,7 +75,7 @@ func (r *MongoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 func (r *MongoReconciler) reconcileMongoDB(ctx context.Context, wg *sync.WaitGroup, errStream chan<- error, m *pipecdv1alpha1.Mongo) {
 	defer (*wg).Done()
 	log := r.Log.WithValues("component", "mongodb")
-	mongodbNN := mongo.MakeMongoNamespacedName(m.Name, m.Namespace)
+	mongodbNN := object.MakeMongoNamespacedName(m.Name, m.Namespace)
 
 	/* Generate mongodb StatefulSet (NamespacedName) */
 	mongodbStatefulSet := &appsv1.StatefulSet{
@@ -87,7 +87,7 @@ func (r *MongoReconciler) reconcileMongoDB(ctx context.Context, wg *sync.WaitGro
 
 	/* Apply mongodb StatefulSet */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, mongodbStatefulSet, func() (err error) {
-		mongodbStatefulSet.Spec, err = mongo.MakeMongoStatefulSetSpec(*m)
+		mongodbStatefulSet.Spec, err = object.MakeMongoStatefulSetSpec(*m)
 		if err != nil {
 			return err
 		}
@@ -112,7 +112,7 @@ func (r *MongoReconciler) reconcileMongoDB(ctx context.Context, wg *sync.WaitGro
 
 	/* Apply mongodb Service */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, mongodbService, func() (err error) {
-		mongodbService.Spec, err = mongo.MakeMongoServiceSpec(*m)
+		mongodbService.Spec, err = object.MakeMongoServiceSpec(*m)
 		if err != nil {
 			return err
 		}

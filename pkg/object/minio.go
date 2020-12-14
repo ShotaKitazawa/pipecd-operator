@@ -1,10 +1,9 @@
-package minio
+package object
 
 import (
 	"fmt"
 
 	pipecdv1alpha1 "github.com/ShotaKitazawa/pipecd-operator/api/v1alpha1"
-	"github.com/ShotaKitazawa/pipecd-operator/pkg/controlplane"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -109,7 +108,7 @@ func MakeMinioPodSpec(
 								LocalObjectReference: v1.LocalObjectReference{
 									Name: m.Spec.Secret.SecretName,
 								},
-								Key: controlplane.SecretKeyMinioAccessKey,
+								Key: SecretKeyMinioAccessKey,
 							},
 						},
 					},
@@ -120,7 +119,7 @@ func MakeMinioPodSpec(
 								LocalObjectReference: v1.LocalObjectReference{
 									Name: m.Spec.Secret.SecretName,
 								},
-								Key: controlplane.SecretKeyMinioSecretKey,
+								Key: SecretKeyMinioSecretKey,
 							},
 						},
 					},

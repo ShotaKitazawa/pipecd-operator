@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	pipecdv1alpha1 "github.com/ShotaKitazawa/pipecd-operator/api/v1alpha1"
-	"github.com/ShotaKitazawa/pipecd-operator/pkg/controlplane"
+	"github.com/ShotaKitazawa/pipecd-operator/pkg/object"
 )
 
 // var reconcileTimeoutSecond = 30 * time.Second
@@ -167,14 +167,14 @@ func (r *ControlPlaneReconciler) reconcileGeneral(ctx context.Context, wg *sync.
 	/* Generate ConfigMap (NamespacedName) */
 	cm := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      controlplane.ConfigMapName,
+			Name:      object.ConfigMapName,
 			Namespace: cp.Namespace,
 		},
 	}
 
 	/* Apply ConfigMap */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, cm, func() (err error) {
-		cm.BinaryData, err = controlplane.MakeConfigMapBinaryData(*cp)
+		cm.BinaryData, err = object.MakeConfigMapBinaryData(*cp)
 		if err != nil {
 			return err
 		}
@@ -192,14 +192,14 @@ func (r *ControlPlaneReconciler) reconcileGeneral(ctx context.Context, wg *sync.
 	/* Generate Service (NamespacedName) */
 	service := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      controlplane.ServiceName,
+			Name:      object.ServiceName,
 			Namespace: cp.Namespace,
 		},
 	}
 
 	/* Apply Service */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, service, func() (err error) {
-		service.Spec, err = controlplane.MakeServiceSpec(*cp)
+		service.Spec, err = object.MakeServiceSpec(*cp)
 		if err != nil {
 			return err
 		}
@@ -227,7 +227,7 @@ func (r *ControlPlaneReconciler) reconcileGeneral(ctx context.Context, wg *sync.
 func (r *ControlPlaneReconciler) reconcileGateway(ctx context.Context, wg *sync.WaitGroup, errStream chan<- error, cp *pipecdv1alpha1.ControlPlane) {
 	defer (*wg).Done()
 	log := r.Log.WithValues("component", "gateway")
-	gatewayNN := controlplane.MakeGatewayNamespacedName(cp.Name, cp.Namespace)
+	gatewayNN := object.MakeGatewayNamespacedName(cp.Name, cp.Namespace)
 
 	/* Generate gateway ConfigMap (NamespacedName) */
 	gatewayConfigMap := &v1.ConfigMap{
@@ -239,7 +239,7 @@ func (r *ControlPlaneReconciler) reconcileGateway(ctx context.Context, wg *sync.
 
 	/* Apply gateway ConfigMap */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, gatewayConfigMap, func() (err error) {
-		gatewayConfigMap.BinaryData, err = controlplane.MakeGatewayConfigMapBinaryData(*cp)
+		gatewayConfigMap.BinaryData, err = object.MakeGatewayConfigMapBinaryData(*cp)
 		if err != nil {
 			return err
 		}
@@ -264,7 +264,7 @@ func (r *ControlPlaneReconciler) reconcileGateway(ctx context.Context, wg *sync.
 
 	/* Apply gateway Deployment */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, gatewayDeployment, func() (err error) {
-		gatewayDeployment.Spec, err = controlplane.MakeGatewayDeploymentSpec(*cp)
+		gatewayDeployment.Spec, err = object.MakeGatewayDeploymentSpec(*cp)
 		if err != nil {
 			return err
 		}
@@ -310,7 +310,7 @@ func (r *ControlPlaneReconciler) reconcileGateway(ctx context.Context, wg *sync.
 
 	/* Apply gateway Service */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, gatewayService, func() (err error) {
-		gatewayService.Spec, err = controlplane.MakeGatewayServiceSpec(*cp)
+		gatewayService.Spec, err = object.MakeGatewayServiceSpec(*cp)
 		if err != nil {
 			return err
 		}
@@ -338,7 +338,7 @@ func (r *ControlPlaneReconciler) reconcileGateway(ctx context.Context, wg *sync.
 func (r *ControlPlaneReconciler) reconcileServer(ctx context.Context, wg *sync.WaitGroup, errStream chan<- error, cp *pipecdv1alpha1.ControlPlane) {
 	defer (*wg).Done()
 	log := r.Log.WithValues("component", "server")
-	serverNN := controlplane.MakeServerNamespacedName(cp.Name, cp.Namespace)
+	serverNN := object.MakeServerNamespacedName(cp.Name, cp.Namespace)
 
 	/* Generate server Deployment (NamespacedName) */
 	serverDeployment := &appsv1.Deployment{
@@ -350,7 +350,7 @@ func (r *ControlPlaneReconciler) reconcileServer(ctx context.Context, wg *sync.W
 
 	/* Apply server Deployment */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, serverDeployment, func() (err error) {
-		serverDeployment.Spec, err = controlplane.MakeServerDeploymentSpec(*cp)
+		serverDeployment.Spec, err = object.MakeServerDeploymentSpec(*cp)
 		if err != nil {
 			return err
 		}
@@ -396,7 +396,7 @@ func (r *ControlPlaneReconciler) reconcileServer(ctx context.Context, wg *sync.W
 
 	/* Apply server Service */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, serverService, func() (err error) {
-		serverService.Spec, err = controlplane.MakeServerServiceSpec(*cp)
+		serverService.Spec, err = object.MakeServerServiceSpec(*cp)
 		if err != nil {
 			return err
 		}
@@ -423,7 +423,7 @@ func (r *ControlPlaneReconciler) reconcileServer(ctx context.Context, wg *sync.W
 func (r *ControlPlaneReconciler) reconcileCache(ctx context.Context, wg *sync.WaitGroup, errStream chan<- error, cp *pipecdv1alpha1.ControlPlane) {
 	defer (*wg).Done()
 	log := r.Log.WithValues("component", "cache")
-	cacheNN := controlplane.MakeCacheNamespacedName(cp.Name, cp.Namespace)
+	cacheNN := object.MakeCacheNamespacedName(cp.Name, cp.Namespace)
 
 	/* Generate cache Deployment (NamespacedName) */
 	cacheDeployment := &appsv1.Deployment{
@@ -435,7 +435,7 @@ func (r *ControlPlaneReconciler) reconcileCache(ctx context.Context, wg *sync.Wa
 
 	/* Apply cache Deployment */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, cacheDeployment, func() (err error) {
-		cacheDeployment.Spec, err = controlplane.MakeCacheDeploymentSpec(*cp)
+		cacheDeployment.Spec, err = object.MakeCacheDeploymentSpec(*cp)
 		if err != nil {
 			return err
 		}
@@ -481,7 +481,7 @@ func (r *ControlPlaneReconciler) reconcileCache(ctx context.Context, wg *sync.Wa
 
 	/* Apply cache Service */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, cacheService, func() (err error) {
-		cacheService.Spec, err = controlplane.MakeCacheServiceSpec(*cp)
+		cacheService.Spec, err = object.MakeCacheServiceSpec(*cp)
 		if err != nil {
 			return err
 		}
@@ -508,7 +508,7 @@ func (r *ControlPlaneReconciler) reconcileCache(ctx context.Context, wg *sync.Wa
 func (r *ControlPlaneReconciler) reconcileOps(ctx context.Context, wg *sync.WaitGroup, errStream chan<- error, cp *pipecdv1alpha1.ControlPlane) {
 	defer (*wg).Done()
 	log := r.Log.WithValues("component", "ops")
-	opsNN := controlplane.MakeOpsNamespacedName(cp.Name, cp.Namespace)
+	opsNN := object.MakeOpsNamespacedName(cp.Name, cp.Namespace)
 
 	/* Generate ops Deployment (NamespacedName) */
 	opsDeployment := &appsv1.Deployment{
@@ -520,7 +520,7 @@ func (r *ControlPlaneReconciler) reconcileOps(ctx context.Context, wg *sync.Wait
 
 	/* Apply ops Deployment */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, opsDeployment, func() (err error) {
-		opsDeployment.Spec, err = controlplane.MakeOpsDeploymentSpec(*cp)
+		opsDeployment.Spec, err = object.MakeOpsDeploymentSpec(*cp)
 		if err != nil {
 			return err
 		}
@@ -566,7 +566,7 @@ func (r *ControlPlaneReconciler) reconcileOps(ctx context.Context, wg *sync.Wait
 
 	/* Apply ops Service */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, opsService, func() (err error) {
-		opsService.Spec, err = controlplane.MakeOpsServiceSpec(*cp)
+		opsService.Spec, err = object.MakeOpsServiceSpec(*cp)
 		if err != nil {
 			return err
 		}

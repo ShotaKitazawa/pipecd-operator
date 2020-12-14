@@ -1,4 +1,4 @@
-package controlplane
+package object
 
 import (
 	"encoding/json"

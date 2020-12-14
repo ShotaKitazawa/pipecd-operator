@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	pipecdv1alpha1 "github.com/ShotaKitazawa/pipecd-operator/api/v1alpha1"
-	"github.com/ShotaKitazawa/pipecd-operator/pkg/minio"
+	"github.com/ShotaKitazawa/pipecd-operator/pkg/object"
 )
 
 // MinioReconciler reconciles a Minio object
@@ -75,7 +75,7 @@ func (r *MinioReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 func (r *MinioReconciler) reconcileMinio(ctx context.Context, wg *sync.WaitGroup, errStream chan<- error, m *pipecdv1alpha1.Minio) {
 	defer (*wg).Done()
 	log := r.Log.WithValues("component", "minio")
-	minioNN := minio.MakeMinioNamespacedName(m.Name, m.Namespace)
+	minioNN := object.MakeMinioNamespacedName(m.Name, m.Namespace)
 
 	/* Generate minio StatefulSet (NamespacedName) */
 	minioStatefulSet := &appsv1.StatefulSet{
@@ -87,7 +87,7 @@ func (r *MinioReconciler) reconcileMinio(ctx context.Context, wg *sync.WaitGroup
 
 	/* Apply minio StatefulSet */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, minioStatefulSet, func() (err error) {
-		minioStatefulSet.Spec, err = minio.MakeMinioStatefulSetSpec(*m)
+		minioStatefulSet.Spec, err = object.MakeMinioStatefulSetSpec(*m)
 		if err != nil {
 			return err
 		}
@@ -112,7 +112,7 @@ func (r *MinioReconciler) reconcileMinio(ctx context.Context, wg *sync.WaitGroup
 
 	/* Apply minio Service */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, minioService, func() (err error) {
-		minioService.Spec, err = minio.MakeMinioServiceSpec(*m)
+		minioService.Spec, err = object.MakeMinioServiceSpec(*m)
 		if err != nil {
 			return err
 		}

@@ -19,7 +19,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	pipecdv1alpha1 "github.com/ShotaKitazawa/pipecd-operator/api/v1alpha1"
-	"github.com/ShotaKitazawa/pipecd-operator/pkg/controlplane"
 	"github.com/ShotaKitazawa/pipecd-operator/pkg/object"
 	"github.com/ShotaKitazawa/pipecd-operator/pkg/pipecd"
 )
@@ -93,11 +92,11 @@ func (r *PipedReconciler) reconcile(ctx context.Context, p *pipecdv1alpha1.Piped
 	}
 	cp := cpList.Items[0]
 
-	serverNN := controlplane.MakeServerNamespacedName(cp.Name, cp.Namespace)
+	serverNN := object.MakeServerNamespacedName(cp.Name, cp.Namespace)
 	pipecdServerAddr := fmt.Sprintf("%s.%s.svc:%d",
 		serverNN.Name,
 		serverNN.Namespace,
-		controlplane.ServerContainerWebServerPort,
+		object.ServerContainerWebServerPort,
 	)
 
 	client, ctx, err := pipecd.NewClientGenerator(string(encryptionKeyBytes), p.Spec.ProjectID, p.Spec.Insecure).

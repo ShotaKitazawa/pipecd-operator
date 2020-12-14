@@ -1,4 +1,4 @@
-package controlplane
+package object
 
 import (
 	"fmt"
@@ -210,6 +210,14 @@ func MakeGatewayConfigMapBinaryData(
 	}
 
 	return data, nil
+}
+
+func GenerateGatewayConfig() ([]byte, error) {
+	f, err := embed.Assets.Open("/assets/envoy-config.yaml")
+	if err != nil {
+		return nil, err
+	}
+	return ioutil.ReadAll(f)
 }
 
 func generateGatewayLabel() map[string]string {
