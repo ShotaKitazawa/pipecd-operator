@@ -36,7 +36,6 @@ type MinioSpec struct {
 // MinioStatus defines the observed state of Minio
 type MinioStatus struct {
 	// this is equal deployment.status.availableReplicas of mongodb
-	// +optional
 	AvailableReplicas int32 `json:"availableReplicas"`
 }
 

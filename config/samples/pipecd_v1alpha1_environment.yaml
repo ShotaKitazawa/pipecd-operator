@@ -3,7 +3,7 @@ kind: Environment
 metadata:
   name: environment-sample
 spec:
-  name: test
+  name: test-environment
   description: test
   projectID: quickstart
   insecure: true

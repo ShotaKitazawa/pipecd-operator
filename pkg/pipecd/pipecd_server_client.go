@@ -59,6 +59,7 @@ func (c ClientGenerator) generateSignedToken() (string, error) {
 			IssuedAt:  now.Unix(),
 			NotBefore: now.Unix(),
 			ExpiresAt: now.Add(time.Hour * 1).Unix(),
+			Subject:   "TODO",
 		},
 		Role: pipecd_model.Role{
 			ProjectId:   c.projectId,

@@ -4,7 +4,7 @@ metadata:
   name: controlplane-sample
 spec:
   replicas: 1
-  version: "v0.9.0-36-g5512ad5"
+  version: "v0.9.0"
   envoyVersion: "v1.10.0"
   redisVersion: "5.0.5-alpine3.9"
   secret:

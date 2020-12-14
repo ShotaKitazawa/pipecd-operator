@@ -43,14 +43,14 @@ func (r *EnvironmentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *EnvironmentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
-	log := r.Log.WithValues("controlplane", req.NamespacedName)
+	log := r.Log.WithValues("environment", req.NamespacedName)
 
 	/* Load Environment */
 	var e pipecdv1alpha1.Environment
 	log.Info("fetching Environment Resource")
 	if err := r.Get(ctx, req.NamespacedName, &e); err != nil {
 		if errors_.IsNotFound(err) {
-			r.Log.Info("Environment not found", "Namespace", req.Namespace, "Name", req.Name)
+			log.Info("Environment not found", "Namespace", req.Namespace, "Name", req.Name)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -60,23 +60,12 @@ func (r *EnvironmentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 		return r.reconcileDelete(ctx, &e)
 	}
 
-	/* Load ControlPlane */
-	var cpList pipecdv1alpha1.ControlPlaneList
-	if err := r.List(ctx, &cpList, &client.ListOptions{Namespace: req.Namespace}); err != nil {
-		r.Log.Info("ControlPlane not found", "Namespace", req.Namespace)
-		return ctrl.Result{}, err
-	} else if len(cpList.Items) != 1 {
-		r.Log.Info("ControlPlane is none of more than 1", "Namespace", req.Namespace)
-		return ctrl.Result{}, fmt.Errorf("ControlPlane more than 1: %v", cpList.Items)
-	}
-
-	cp := cpList.Items[0]
-
-	return r.reconcile(ctx, &e, &cp)
+	return r.reconcile(ctx, &e)
 }
 
-func (r *EnvironmentReconciler) reconcile(ctx context.Context, e *pipecdv1alpha1.Environment, cp *pipecdv1alpha1.ControlPlane) (ctrl.Result, error) {
+func (r *EnvironmentReconciler) reconcile(ctx context.Context, e *pipecdv1alpha1.Environment) (ctrl.Result, error) {
 
+	/* Load Secret (key: encryption-key) */
 	var secret v1.Secret
 	if err := r.Get(ctx, types.NamespacedName{Namespace: e.Namespace, Name: e.Spec.EncryptionKeyRef.SecretName}, &secret); err != nil {
 		return ctrl.Result{}, err
@@ -85,6 +74,17 @@ func (r *EnvironmentReconciler) reconcile(ctx context.Context, e *pipecdv1alpha1
 	if !ok {
 		return ctrl.Result{}, fmt.Errorf(`no key "%v" in Secret %v`, e.Spec.EncryptionKeyRef.Key, e.Spec.Name)
 	}
+
+	/* Load & Validate ControlPlaneList */
+	var cpList pipecdv1alpha1.ControlPlaneList
+	if err := r.List(ctx, &cpList, &client.ListOptions{Namespace: e.Namespace}); err != nil {
+		r.Log.Info("ControlPlane not found", "Namespace", e.Namespace)
+		return ctrl.Result{}, err
+	} else if len(cpList.Items) != 1 {
+		r.Log.Info("ControlPlane is none of more than 1", "Namespace", e.Namespace)
+		return ctrl.Result{}, fmt.Errorf("ControlPlane more than 1: %v", cpList.Items)
+	}
+	cp := cpList.Items[0]
 
 	serverNN := controlplane.MakeServerNamespacedName(cp.Name, cp.Namespace)
 	pipecdServerAddr := fmt.Sprintf("%s.%s.svc:%d",

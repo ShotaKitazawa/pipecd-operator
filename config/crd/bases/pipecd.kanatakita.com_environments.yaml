@@ -61,6 +61,7 @@ spec:
               type: string
           required:
           - description
+          - encryptionKeyRef
           - name
           - projectID
           type: object

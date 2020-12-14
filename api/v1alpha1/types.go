@@ -25,3 +25,20 @@ type EmbeddedPersistentVolumeClaim struct {
 	// More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims
 	Spec v1.PersistentVolumeClaimSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
 }
+
+type EmbeddedSecretKeySelector struct {
+	// +kubebuilder:validation:Required
+
+	// The name of the secret in the pod's namespace to select from.
+	SecretName string `json:"secretName"`
+
+	// +kubebuilder:validation:Required
+
+	// The key of the secret to select from.  Must be a valid secret key.
+	Key string `json:"key"`
+
+	// +kubebuilder:validation:Optional
+
+	// Specify whether the Secret or its key must be defined
+	Optional *bool `json:"optional,omitempty"`
+}

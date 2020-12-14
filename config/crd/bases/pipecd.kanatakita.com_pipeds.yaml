@@ -34,13 +34,394 @@ spec:
         spec:
           description: PipedSpec defines the desired state of Piped
           properties:
-            foo:
-              description: Foo is an example field of Piped. Edit Piped_types.go to
-                remove/update
+            config:
+              description: Config is Piped configuration of PipeCD
+              properties:
+                analysisProviders:
+                  description: List of analysis providers can be used by this piped.
+                  items:
+                    properties:
+                      datadog:
+                        description: Config of Datadog
+                        properties:
+                          address:
+                            type: string
+                          apiKeyFile:
+                            description: The path to the api key file.
+                            type: string
+                          applicationKeyFile:
+                            description: The path to the application key file.
+                            type: string
+                        required:
+                        - address
+                        - apiKeyFile
+                        - applicationKeyFile
+                        type: object
+                      name:
+                        description: The name of the analysis provider.
+                        type: string
+                      prometheus:
+                        description: Config of Prometheus
+                        properties:
+                          address:
+                            type: string
+                          passwordFile:
+                            description: The path to the password file.
+                            type: string
+                          usernameFile:
+                            description: The path to the username file.
+                            type: string
+                        required:
+                        - address
+                        type: object
+                      stackdriver:
+                        description: Config of Stackdriver
+                        properties:
+                          serviceAccountFile:
+                            description: The path to the service account file.
+                            type: string
+                        required:
+                        - serviceAccountFile
+                        type: object
+                    required:
+                    - name
+                    type: object
+                  type: array
+                apiAddress:
+                  description: The address used to connect to the control-plane's
+                    API.
+                  type: string
+                chartRepositories:
+                  description: List of helm chart repositories that should be added
+                    while starting up.
+                  items:
+                    properties:
+                      address:
+                        description: The address to the Helm chart repository.
+                        type: string
+                      name:
+                        description: The name of the Helm chart repository.
+                        type: string
+                      password:
+                        description: Password used for the repository backed by HTTP
+                          basic authentication.
+                        type: string
+                      username:
+                        description: Username used for the repository backed by HTTP
+                          basic authentication.
+                        type: string
+                    type: object
+                  type: array
+                cloudProviders:
+                  description: List of cloud providers can be used by this piped.
+                  items:
+                    properties:
+                      cloudRunConfig:
+                        description: config of CloudRun
+                        properties:
+                          credentialsFile:
+                            description: The path to the service account file for
+                              accessing CloudRun service.
+                            type: string
+                          project:
+                            description: The GCP project hosting the CloudRun service.
+                            type: string
+                          region:
+                            description: The region of running CloudRun service.
+                            type: string
+                        required:
+                        - project
+                        - region
+                        type: object
+                      kubernetesConfig:
+                        description: config of Kubernetes
+                        properties:
+                          appStateInformer:
+                            description: Configuration for application resource informer.
+                            properties:
+                              excludeResources:
+                                description: List of resources that should be ignored
+                                  from the watching targets.
+                                items:
+                                  properties:
+                                    apiVersion:
+                                      description: The APIVersion of the kubernetes
+                                        resource.
+                                      type: string
+                                    kind:
+                                      description: The kind name of the kubernetes
+                                        resource. Empty means all kinds are matching.
+                                      type: string
+                                  required:
+                                  - apiVersion
+                                  type: object
+                                type: array
+                              includeResources:
+                                description: List of resources that should be added
+                                  to the watching targets.
+                                items:
+                                  properties:
+                                    apiVersion:
+                                      description: The APIVersion of the kubernetes
+                                        resource.
+                                      type: string
+                                    kind:
+                                      description: The kind name of the kubernetes
+                                        resource. Empty means all kinds are matching.
+                                      type: string
+                                  required:
+                                  - apiVersion
+                                  type: object
+                                type: array
+                              namespace:
+                                description: Only watches the specified namespace.
+                                  Empty means watching all namespaces.
+                                type: string
+                            type: object
+                          kubeConfigPath:
+                            description: The path to the kubeconfig file. Empty means
+                              in-cluster.
+                            type: string
+                          masterURL:
+                            description: The master URL of the kubernetes cluster.
+                              Empty means in-cluster.
+                            type: string
+                        type: object
+                      lambdaConfig:
+                        description: config of Lambda
+                        properties:
+                          region:
+                            type: string
+                        required:
+                        - region
+                        type: object
+                      name:
+                        description: The name of the cloud provider.
+                        type: string
+                      terraformConfig:
+                        description: config of Terraform
+                        properties:
+                          vars:
+                            description: 'List of variables that will be set directly
+                              on terraform commands with "-var" flag. The variable
+                              must be formatted by "key=value" as below: "image_id=ami-abc123"
+                              ''image_id_list=["ami-abc123","ami-def456"]'' ''image_id_map={"us-east-1":"ami-abc123","us-east-2":"ami-def456"}'''
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                    required:
+                    - name
+                    type: object
+                  type: array
+                git:
+                  description: Git configuration needed for git commands.
+                  properties:
+                    email:
+                      description: The email that will be configured for `git` user.
+                      type: string
+                    host:
+                      description: The host name. e.g. github.com, gitlab.com Default
+                        is "github.com".
+                      type: string
+                    hostName:
+                      description: The hostname or IP address of the remote git server.
+                        e.g. github.com, gitlab.com Default is the same value with
+                        Host.
+                      type: string
+                    sshConfigFilePath:
+                      description: Where to write ssh config file. Default is "/home/pipecd/.ssh/config".
+                      type: string
+                    sshKeyFile:
+                      description: The path to the private ssh key file. This will
+                        be used to clone the source code of the specified git repositories.
+                      type: string
+                    username:
+                      description: The username that will be configured for `git`
+                        user.
+                      type: string
+                  type: object
+                notifications:
+                  description: Sending notification to Slack, Webhook…
+                  properties:
+                    receivers:
+                      description: List of notification receivers.
+                      items:
+                        properties:
+                          name:
+                            description: The name of the receiver.
+                            type: string
+                          slack:
+                            description: Configuration for slack receiver.
+                            properties:
+                              hookURL:
+                                description: The hookURL of a slack channel.
+                                type: string
+                            required:
+                            - hookURL
+                            type: object
+                          webhook:
+                            description: Configuration for webhook receiver.
+                            properties:
+                              url:
+                                type: string
+                            required:
+                            - url
+                            type: object
+                        required:
+                        - name
+                        type: object
+                      type: array
+                    routes:
+                      description: List of notification routes.
+                      items:
+                        properties:
+                          apps:
+                            description: List of applications where their events should
+                              be routed to the receiver.
+                            items:
+                              type: string
+                            type: array
+                          envs:
+                            description: List of environments where their events should
+                              be routed to the receiver.
+                            items:
+                              type: string
+                            type: array
+                          events:
+                            description: List of events that should be routed to the
+                              receiver.
+                            items:
+                              type: string
+                            type: array
+                          groups:
+                            description: List of event groups should be routed to
+                              the receiver.
+                            items:
+                              type: string
+                            type: array
+                          ignoreApps:
+                            description: List of applications where their events should
+                              be ignored.
+                            items:
+                              type: string
+                            type: array
+                          ignoreEnvs:
+                            description: List of environments where their events should
+                              be ignored.
+                            items:
+                              type: string
+                            type: array
+                          ignoreEvents:
+                            description: List of events that should be ignored.
+                            items:
+                              type: string
+                            type: array
+                          ignoreGroups:
+                            description: List of event groups should be ignored.
+                            items:
+                              type: string
+                            type: array
+                          name:
+                            description: The name of the route.
+                            type: string
+                          receiver:
+                            description: The name of receiver who will receive all
+                              matched events.
+                            type: string
+                        required:
+                        - name
+                        - receiver
+                        type: object
+                      type: array
+                  type: object
+                pipedID:
+                  description: The generated ID for this piped.
+                  type: string
+                pipedKeyFile:
+                  description: The path to the file containing the generated Key string
+                    for this piped.
+                  type: string
+                projectID:
+                  description: The identifier of the PipeCD project where this piped
+                    belongs to.
+                  type: string
+                repositories:
+                  description: List of git repositories this piped will handle.
+                  items:
+                    properties:
+                      branch:
+                        description: The branch will be handled.
+                        type: string
+                      remote:
+                        description: Remote address of the repository used to clone
+                          the source code. e.g. git@github.com:org/repo.git
+                        type: string
+                      repoId:
+                        description: Unique identifier for this repository. This must
+                          be unique in the piped scope.
+                        type: string
+                    type: object
+                  type: array
+                syncInterval:
+                  description: How often to check whether an application should be
+                    synced. Default is 1m.
+                  format: int64
+                  type: integer
+                webAddress:
+                  description: The address to the control-plane's Web.
+                  type: string
+              required:
+              - apiAddress
+              - webAddress
+              type: object
+            description:
               type: string
+            encryptionKeyRef:
+              properties:
+                key:
+                  description: The key of the secret to select from.  Must be a valid
+                    secret key.
+                  type: string
+                optional:
+                  description: Specify whether the Secret or its key must be defined
+                  type: boolean
+                secretName:
+                  description: The name of the secret in the pod's namespace to select
+                    from.
+                  type: string
+              required:
+              - key
+              - secretName
+              type: object
+            environment:
+              type: string
+            insecure:
+              type: boolean
+            name:
+              type: string
+            projectID:
+              type: string
+            version:
+              type: string
+          required:
+          - config
+          - description
+          - encryptionKeyRef
+          - environment
+          - name
+          - projectID
+          - version
           type: object
         status:
           description: PipedStatus defines the observed state of Piped
+          properties:
+            availableReplicas:
+              description: this is equal deployment.status.availableReplicas of piped
+              format: int32
+              type: integer
+          required:
+          - availableReplicas
           type: object
       type: object
   version: v1alpha1
