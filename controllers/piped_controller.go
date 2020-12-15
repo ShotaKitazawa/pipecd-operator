@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/go-logr/logr"
 	"github.com/golang/protobuf/ptypes/wrappers"
@@ -28,7 +29,10 @@ const (
 )
 
 var (
-	pipedKeyCache string
+	pipedKeyCache           string
+	pipedKeyCacheMutex      sync.Mutex
+	encryptionKeyCache      string
+	encryptionKeyCacheMutex sync.Mutex
 )
 
 // PipedReconciler reconciles a Piped object
@@ -72,13 +76,18 @@ func (r *PipedReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 func (r *PipedReconciler) reconcile(ctx context.Context, p *pipecdv1alpha1.Piped) (ctrl.Result, error) {
 	/* Load Secret (key: encryption-key) */
-	var secret corev1.Secret
-	if err := r.Get(ctx, types.NamespacedName{Namespace: p.Namespace, Name: p.Spec.EncryptionKeyRef.SecretName}, &secret); err != nil {
-		return ctrl.Result{}, err
-	}
-	encryptionKeyBytes, ok := secret.Data[p.Spec.EncryptionKeyRef.Key]
-	if !ok {
-		return ctrl.Result{}, fmt.Errorf(`no key "%v" in Secret %v`, p.Spec.EncryptionKeyRef.Key, p.Spec.Name)
+	if encryptionKeyCache == "" {
+		var secret corev1.Secret
+		if err := r.Get(ctx, types.NamespacedName{Namespace: p.Namespace, Name: p.Spec.EncryptionKeyRef.SecretName}, &secret); err != nil {
+			return ctrl.Result{}, err
+		}
+		encryptionKeyBytes, ok := secret.Data[p.Spec.EncryptionKeyRef.Key]
+		if !ok {
+			return ctrl.Result{}, fmt.Errorf(`no key "%v" in Secret %v`, p.Spec.EncryptionKeyRef.Key, p.Spec.Name)
+		}
+		encryptionKeyCacheMutex.Lock()
+		encryptionKeyCache = string(encryptionKeyBytes)
+		encryptionKeyCacheMutex.Unlock()
 	}
 
 	/* Load & Validate ControlPlaneList */
@@ -88,10 +97,9 @@ func (r *PipedReconciler) reconcile(ctx context.Context, p *pipecdv1alpha1.Piped
 		return ctrl.Result{}, err
 	} else if len(cpList.Items) != 1 {
 		r.Log.Info("Piped is none of more than 1", "Namespace", p.Namespace)
-		return ctrl.Result{}, fmt.Errorf("Piped more than 1: %v", cpList.Items)
+		return ctrl.Result{}, fmt.Errorf("Piped is none or more than 1: %v", cpList.Items)
 	}
 	cp := cpList.Items[0]
-
 	serverNN := object.MakeServerNamespacedName(cp.Name, cp.Namespace)
 	pipecdServerAddr := fmt.Sprintf("%s.%s.svc:%d",
 		serverNN.Name,
@@ -99,7 +107,8 @@ func (r *PipedReconciler) reconcile(ctx context.Context, p *pipecdv1alpha1.Piped
 		object.ServerContainerWebServerPort,
 	)
 
-	client, ctx, err := pipecd.NewClientGenerator(string(encryptionKeyBytes), p.Spec.ProjectID, p.Spec.Insecure).
+	// generate gRPC Client for Piped
+	client, ctx, err := pipecd.NewClientGenerator(encryptionKeyCache, p.Spec.ProjectID, p.Spec.Insecure).
 		GeneratePipeCdWebServiceClient(ctx, pipecdServerAddr)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -145,7 +154,9 @@ func (r *PipedReconciler) reconcile(ctx context.Context, p *pipecdv1alpha1.Piped
 			return ctrl.Result{}, err
 		}
 		pipedId = respRegisterPiped.Id
+		pipedKeyCacheMutex.Lock()
 		pipedKeyCache = respRegisterPiped.Key
+		pipedKeyCacheMutex.Unlock()
 	}
 
 	// generate K8s Objects for Piped
@@ -338,15 +349,68 @@ func (r *PipedReconciler) reconcilePiped(ctx context.Context, p *pipecdv1alpha1.
 			return ctrl.Result{}, err
 		}
 		/* Record to event */
-		r.Recorder.Eventf(p, corev1.EventTypeNormal, "Updated", "Update Piped.Status.AvailablePipedReplicas: %d", p.Status.AvailableReplicas)
+		r.Recorder.Eventf(p, corev1.EventTypeNormal, "Updated", "Update Piped.status.availablePipedReplicas: %d", p.Status.AvailableReplicas)
+	}
+	if pipedId != p.Status.PipedId {
+		p.Status.PipedId = pipedId
+		if err := r.Status().Update(ctx, p); err != nil {
+			log.Error(err, "unable to update Piped status")
+			return ctrl.Result{}, err
+		}
+		/* Record to event */
+		r.Recorder.Eventf(p, corev1.EventTypeNormal, "Updated", "Update Piped.status.pipedId: %d", p.Status.AvailableReplicas)
 	}
 
 	return ctrl.Result{}, nil
 }
 
 func (r *PipedReconciler) reconcileDelete(ctx context.Context, p *pipecdv1alpha1.Piped) (ctrl.Result, error) {
+	/* Load Secret (key: encryption-key) */
+	if encryptionKeyCache == "" {
+		var secret corev1.Secret
+		if err := r.Get(ctx, types.NamespacedName{Namespace: p.Namespace, Name: p.Spec.EncryptionKeyRef.SecretName}, &secret); err != nil {
+			return ctrl.Result{}, err
+		}
+		encryptionKeyBytes, ok := secret.Data[p.Spec.EncryptionKeyRef.Key]
+		if !ok {
+			return ctrl.Result{}, fmt.Errorf(`no key "%v" in Secret %v`, p.Spec.EncryptionKeyRef.Key, p.Spec.Name)
+		}
+		encryptionKeyCacheMutex.Lock()
+		encryptionKeyCache = string(encryptionKeyBytes)
+		encryptionKeyCacheMutex.Unlock()
+	}
 
-	// TBD: PipeCD v0.9.0, no method DELETE of PipeCD Piped.
+	/* Load & Validate ControlPlaneList */
+	var cpList pipecdv1alpha1.ControlPlaneList
+	if err := r.List(ctx, &cpList, &client.ListOptions{Namespace: p.Namespace}); err != nil {
+		r.Log.Info("Piped not found", "Namespace", p.Namespace)
+		return ctrl.Result{}, err
+	} else if len(cpList.Items) != 1 {
+		r.Log.Info("Piped is none or more than 1", "Namespace", p.Namespace)
+		return ctrl.Result{}, fmt.Errorf("Piped is none or more than 1: %v", cpList.Items)
+	}
+	cp := cpList.Items[0]
+	serverNN := object.MakeServerNamespacedName(cp.Name, cp.Namespace)
+	pipecdServerAddr := fmt.Sprintf("%s.%s.svc:%d",
+		serverNN.Name,
+		serverNN.Namespace,
+		object.ServerContainerWebServerPort,
+	)
+
+	// generate gRPC Client for Piped
+	client, ctx, err := pipecd.NewClientGenerator(encryptionKeyCache, p.Spec.ProjectID, p.Spec.Insecure).
+		GeneratePipeCdWebServiceClient(ctx, pipecdServerAddr)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// get PipedID from Piped.status.pipedID
+	pipedId := p.Status.PipedId
+
+	// disable Piped
+	if _, err := client.DisablePiped(ctx, &webservicepb.DisablePipedRequest{PipedId: pipedId}); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	// remove Finalizer of Piped Object
 	var tmp []string
