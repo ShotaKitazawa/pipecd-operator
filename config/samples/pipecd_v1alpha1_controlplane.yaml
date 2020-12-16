@@ -7,8 +7,12 @@ spec:
   version: "v0.9.0"
   envoyVersion: "v1.10.0"
   redisVersion: "5.0.5-alpine3.9"
-  secret:
-    secretName: secret-sample
+  volumeMounts:
+    - mountPath: /mnt/secret
+      volume:
+        name: secret
+        secret:
+          secretName: secret-minio
   config:
     datastore:
       mongoDBConfig:
@@ -20,8 +24,8 @@ spec:
         #endpoint: http://pipecd-minio:9000
         endpoint: http://minio-sample-minio:9000
         bucket: quickstart
-        accessKeyFile: /etc/pipecd-secret/minio-access-key
-        secretKeyFile: /etc/pipecd-secret/minio-secret-key
+        accessKeyFile: /mnt/secret/minio-access-key
+        secretKeyFile: /mnt/secret/minio-secret-key
         autoCreateBucket: true
     projects:
       - id: quickstart

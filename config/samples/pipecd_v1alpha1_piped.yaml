@@ -6,11 +6,13 @@ spec:
   version: "v0.9.0"
   name: test-piped
   description: test
-  environment: test-environment
+  environmentRef:
+    objectName: environment-sample
+    name: test-environment
   projectID: quickstart
   insecure: true
   encryptionKeyRef:
-    secretName: secret-sample
+    secretName: pipecd
     key: encryption-key
   config:
     syncInterval: 60

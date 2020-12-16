@@ -7,4 +7,4 @@ spec:
   storage:
     emptyDir: {}
   secret:
-    secretName: secret-sample
+    secretName: secret-minio

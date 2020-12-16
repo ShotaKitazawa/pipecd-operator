@@ -26,7 +26,7 @@ type EmbeddedPersistentVolumeClaim struct {
 	Spec v1.PersistentVolumeClaimSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
 }
 
-type EmbeddedSecretKeySelector struct {
+type EmbeddedSecretKeyRef struct {
 	// +kubebuilder:validation:Required
 
 	// The name of the secret in the pod's namespace to select from.
@@ -41,4 +41,36 @@ type EmbeddedSecretKeySelector struct {
 
 	// Specify whether the Secret or its key must be defined
 	Optional *bool `json:"optional,omitempty"`
+}
+
+type EmbeddedVolumeMount struct {
+	// +kubebuilder:validation:Required
+
+	MountPath string `json:"mountPath"`
+
+	// +kubebuilder:validation:Required
+
+	Volume v1.Volume `json:"volume"`
+
+	// +kubebuilder:validation:Optional
+
+	ReadOnly bool `json:"readOnly"`
+
+	// +kubebuilder:validation:Optional
+
+	SubPath string `json:"subPath"`
+
+	// +kubebuilder:validation:Optional
+
+	SubPathExpr string `json:"subPathExpr"`
+}
+
+type EnvironmentRef struct {
+	ObjectName string `json:"objectName"`
+	Name       string `json:"name"`
+}
+
+type PipedRef struct {
+	ObjectName string `json:"objectName"`
+	Name       string `json:"name"`
 }

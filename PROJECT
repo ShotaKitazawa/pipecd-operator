@@ -16,4 +16,7 @@ resources:
 - group: pipecd
   kind: Piped
   version: v1alpha1
+- group: pipecd
+  kind: Application
+  version: v1alpha1
 version: "2"

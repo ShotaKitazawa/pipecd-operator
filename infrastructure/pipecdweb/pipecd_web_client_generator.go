@@ -1,4 +1,4 @@
-package pipecd
+package pipecdweb
 
 import (
 	"context"
@@ -13,27 +13,27 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-type ClientGenerator struct {
+type PipeCDWebServiceClientGenerator struct {
 	encryptionKey string
 	projectId     string
 	insecure      bool
 	certFile      string
 }
 
-func NewClientGenerator(encryptionKey, projectId string, insecure bool) ClientGenerator {
-	return ClientGenerator{
+func NewPipeCDWebServiceClientGenerator(encryptionKey, projectId string, insecure bool) PipeCDWebServiceClientGenerator {
+	return PipeCDWebServiceClientGenerator{
 		encryptionKey: encryptionKey,
 		projectId:     projectId,
 		insecure:      insecure,
 	}
 }
 
-func (c ClientGenerator) WithCertFile(certFile string) ClientGenerator {
+func (c PipeCDWebServiceClientGenerator) WithCertFile(certFile string) PipeCDWebServiceClientGenerator {
 	c.certFile = certFile
 	return c
 }
 
-func (c ClientGenerator) GeneratePipeCdWebServiceClient(ctx context.Context, addr string) (webservicepb.WebServiceClient, context.Context, error) {
+func (c PipeCDWebServiceClientGenerator) GeneratePipeCdWebServiceClient(ctx context.Context, addr string) (webservicepb.WebServiceClient, context.Context, error) {
 	// generate signed token
 	signedToken, err := c.generateSignedToken()
 	if err != nil {
@@ -51,7 +51,7 @@ func (c ClientGenerator) GeneratePipeCdWebServiceClient(ctx context.Context, add
 	return webservicepb.NewWebServiceClient(conn), ctx, nil
 }
 
-func (c ClientGenerator) generateSignedToken() (string, error) {
+func (c PipeCDWebServiceClientGenerator) generateSignedToken() (string, error) {
 	now := time.Now()
 	claims := &pipecd_jwt.Claims{
 		StandardClaims: jwt.StandardClaims{
@@ -74,11 +74,11 @@ func (c ClientGenerator) generateSignedToken() (string, error) {
 	return t, nil
 }
 
-func (c ClientGenerator) addSignedTokenToMetadata(ctx context.Context, signedToken string) context.Context {
+func (c PipeCDWebServiceClientGenerator) addSignedTokenToMetadata(ctx context.Context, signedToken string) context.Context {
 	return metadata.AppendToOutgoingContext(ctx, "cookie", fmt.Sprintf("token=%s", signedToken))
 }
 
-func (c ClientGenerator) parseOptions() []grpc.DialOption {
+func (c PipeCDWebServiceClientGenerator) parseOptions() []grpc.DialOption {
 	var options []grpc.DialOption
 	if !c.insecure {
 		// TODO

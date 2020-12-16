@@ -2,26 +2,24 @@ package controllers
 
 import (
 	"context"
-	"fmt"
+	"reflect"
 
 	"github.com/go-logr/logr"
-	webservicepb "github.com/pipe-cd/pipe/pkg/app/api/service/webservice"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	errors_ "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	pipecdv1alpha1 "github.com/ShotaKitazawa/pipecd-operator/api/v1alpha1"
-	"github.com/ShotaKitazawa/pipecd-operator/pkg/object"
-	"github.com/ShotaKitazawa/pipecd-operator/pkg/pipecd"
+	"github.com/ShotaKitazawa/pipecd-operator/services"
 )
 
 const (
-	environmentFinalizerName = "environment.finalizers.pipecd.kanatakita.com"
+	environmentControllerName = "envirionment"
+	environmentFinalizerName  = "environment.finalizers.pipecd.kanatakita.com"
 )
 
 // EnvironmentReconciler reconciles a Environment object
@@ -43,105 +41,125 @@ func (r *EnvironmentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *EnvironmentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
-	log := r.Log.WithValues("environment", req.NamespacedName)
+	log := r.Log.WithValues(environmentControllerName, req.NamespacedName)
 
 	/* Load Environment */
 	var e pipecdv1alpha1.Environment
-	log.Info("fetching Environment Resource")
 	if err := r.Get(ctx, req.NamespacedName, &e); err != nil {
 		if errors_.IsNotFound(err) {
-			log.Info("Environment not found", "Namespace", req.Namespace, "Name", req.Name)
+			log.Info("Environment not found")
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if !e.ObjectMeta.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(ctx, &e)
-	}
-
-	return r.reconcile(ctx, &e)
-}
-
-func (r *EnvironmentReconciler) reconcile(ctx context.Context, e *pipecdv1alpha1.Environment) (ctrl.Result, error) {
-
-	/* Load Secret (key: encryption-key) */
-	var secret v1.Secret
-	if err := r.Get(ctx, types.NamespacedName{Namespace: e.Namespace, Name: e.Spec.EncryptionKeyRef.SecretName}, &secret); err != nil {
-		return ctrl.Result{}, err
-	}
-	encryptionKeyBytes, ok := secret.Data[e.Spec.EncryptionKeyRef.Key]
-	if !ok {
-		return ctrl.Result{}, fmt.Errorf(`no key "%v" in Secret %v`, e.Spec.EncryptionKeyRef.Key, e.Spec.Name)
-	}
-
-	/* Load & Validate ControlPlaneList */
+	/* Load ControlPlane */
 	var cpList pipecdv1alpha1.ControlPlaneList
-	if err := r.List(ctx, &cpList, &client.ListOptions{Namespace: e.Namespace}); err != nil {
-		r.Log.Info("ControlPlane not found", "Namespace", e.Namespace)
-		return ctrl.Result{}, err
-	} else if len(cpList.Items) != 1 {
-		r.Log.Info("ControlPlane is none of more than 1", "Namespace", e.Namespace)
-		return ctrl.Result{}, fmt.Errorf("ControlPlane more than 1: %v", cpList.Items)
+	if err := r.List(ctx, &cpList); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	} else if len(cpList.Items) == 0 {
+		log.Info("ControlPlane not found")
+		return ctrl.Result{}, nil
 	}
 	cp := cpList.Items[0]
 
-	serverNN := object.MakeServerNamespacedName(cp.Name, cp.Namespace)
-	pipecdServerAddr := fmt.Sprintf("%s.%s.svc:%d",
-		serverNN.Name,
-		serverNN.Namespace,
-		object.ServerContainerWebServerPort,
-	)
-
-	client, ctx, err := pipecd.NewClientGenerator(string(encryptionKeyBytes), e.Spec.ProjectID, e.Spec.Insecure).
-		GeneratePipeCdWebServiceClient(ctx, pipecdServerAddr)
+	/* Generate Environment Service */
+	environmentService, ctx, err := services.NewEnvironmentService(ctx, r.Client, req.Namespace, e.Spec.EncryptionKeyRef, e.Spec.ProjectId, e.Spec.Insecure)
 	if err != nil {
+		log.Info("cannot generate Environment WebService gRPC Client")
+		return ctrl.Result{}, nil
+	}
+
+	// delete if DeletionTimestamp is zero && (Finalizers is none || Finalizers contain only environmentFinalizer)
+	if !e.ObjectMeta.DeletionTimestamp.IsZero() &&
+		(len(e.ObjectMeta.Finalizers) == 0 ||
+			reflect.DeepEqual(e.ObjectMeta.Finalizers, []string{environmentFinalizerName})) {
+		return r.reconcileDelete(ctx, log, &e, &cp, environmentService)
+	}
+
+	return r.reconcile(ctx, log, &e, &cp, environmentService)
+}
+
+func (r *EnvironmentReconciler) reconcile(
+	ctx context.Context,
+	log logr.Logger,
+	e *pipecdv1alpha1.Environment,
+	cp *pipecdv1alpha1.ControlPlane,
+	environmentService *services.EnvironmentService,
+) (ctrl.Result, error) {
+
+	// create Environment
+	environment, err := environmentService.CreateIfNotExists(ctx, e.Spec.Name, e.Spec.Description)
+	if err != nil {
+		log.Error(err, err.Error())
 		return ctrl.Result{}, err
 	}
 
-	// list PipeCD Environment & return if Environment already exists
-	resp, err := client.ListEnvironments(ctx, &webservicepb.ListEnvironmentsRequest{})
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	for _, env := range resp.Environments {
-		if e.Spec.Name == env.Name {
-			return ctrl.Result{}, nil
+	// update Environment Object status
+	if e.Status.EnvironmentId != environment.Id {
+		e.Status.EnvironmentId = environment.Id
+		if err := r.Status().Update(ctx, e); err != nil {
+			log.Error(err, err.Error())
+			return ctrl.Result{}, err
 		}
+		/* Record to event */
+		r.Recorder.Eventf(e, corev1.EventTypeNormal, "Updated", "Update Environment.status.environmentId: %d", e.Status.EnvironmentId)
 	}
 
-	// add PipeCD Environment
-	if _, err := client.AddEnvironment(ctx, &webservicepb.AddEnvironmentRequest{Name: e.Spec.Name, Desc: e.Spec.Description}); err != nil {
+	// add Environment finalizer to Environment Object
+	patchEnv := generatePatchFinalizersObject(e.GroupVersionKind(), e.Namespace, e.Name, e.ObjectMeta.Finalizers)
+	controllerutil.AddFinalizer(patchEnv, environmentFinalizerName)
+	// TODO: 複数 controller が 1object を操作する場合 server-side apply だと conflict する
+	if err := r.Patch(ctx, patchEnv, client.Apply, &client.PatchOptions{FieldManager: environmentControllerName}); err != nil {
+		log.Error(err, err.Error())
 		return ctrl.Result{}, err
 	}
 
-	// update Environment Object
-	e.ObjectMeta.Finalizers = append(e.ObjectMeta.Finalizers, environmentFinalizerName)
-	if err := r.Update(context.Background(), e); err != nil {
+	// add Environment finalizer to ControlPlane Object
+	/* TODO
+	patchCp := generatePatchFinalizersObject(cp.GroupVersionKind(), cp.Namespace, cp.Name, cp.ObjectMeta.Finalizers)
+	controllerutil.AddFinalizer(cp, environmentFinalizerName)
+	if err := r.Patch(ctx, patchCp, client.Merge, &client.PatchOptions{FieldManager: environmentControllerName}); err != nil {
+		log.Error(err, err.Error())
 		return ctrl.Result{}, err
 	}
-
-	// record to event
-	r.Recorder.Eventf(e, corev1.EventTypeNormal, "Updated", "Update Environment.Metadata.Finalizer")
+	*/
 
 	return ctrl.Result{}, nil
 }
 
-func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, e *pipecdv1alpha1.Environment) (ctrl.Result, error) {
+func (r *EnvironmentReconciler) reconcileDelete(
+	ctx context.Context,
+	log logr.Logger,
+	e *pipecdv1alpha1.Environment,
+	cp *pipecdv1alpha1.ControlPlane,
+	environmentService *services.EnvironmentService,
+) (ctrl.Result, error) {
 
-	// TBD: PipeCD v0.9.0, no method DELETE of PipeCD Environment.
-
-	// remove Finalizer of Environment Object
-	var tmp []string
-	for _, val := range e.ObjectMeta.Finalizers {
-		if val != environmentFinalizerName {
-			tmp = append(tmp, val)
-		}
-	}
-	e.ObjectMeta.Finalizers = tmp
-	if err := r.Update(context.Background(), e); err != nil {
+	// delete Environment
+	if err := environmentService.Delete(ctx, e.Status.EnvironmentId); err != nil {
+		log.Error(err, err.Error())
 		return ctrl.Result{}, err
 	}
+
+	// remove Environment finalizer from Environment Object
+	controllerutil.RemoveFinalizer(e, environmentFinalizerName)
+	patchEnv := generatePatchFinalizersObject(e.GroupVersionKind(), e.Namespace, e.Name, e.ObjectMeta.Finalizers)
+	// controllerutil.RemoveFinalizer(patchEnv, environmentFinalizerName)
+	// TODO: 複数 controller が 1object を操作する場合 server-side apply だと conflict する
+	if err := r.Patch(ctx, patchEnv, client.Apply, &client.PatchOptions{FieldManager: environmentControllerName}); err != nil {
+		log.Error(err, err.Error())
+		return ctrl.Result{}, err
+	}
+
+	// remove Environment finalizer from ControlPlane Object
+	/* TODO
+	patchCp := generatePatchFinalizersObject(cp.GroupVersionKind(), cp.Namespace, cp.Name, cp.ObjectMeta.Finalizers)
+	if err := r.Patch(ctx, patchCp, client.Merge, &client.PatchOptions{FieldManager: environmentControllerName}); err != nil {
+		log.Error(err, err.Error())
+		return ctrl.Result{}, err
+	}
+	*/
 
 	return ctrl.Result{}, nil
 }

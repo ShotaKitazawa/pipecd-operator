@@ -16,11 +16,11 @@ type EnvironmentSpec struct {
 
 	// +kubebuilder:validation:Required
 
-	ProjectID string `json:"projectID"`
+	ProjectId string `json:"projectID"`
 
 	// +kubebuilder:validation:Required
 
-	EncryptionKeyRef EmbeddedSecretKeySelector `json:"encryptionKeyRef"`
+	EncryptionKeyRef EmbeddedSecretKeyRef `json:"encryptionKeyRef"`
 
 	// +kubebuilder:validation:Optional
 
@@ -29,10 +29,13 @@ type EnvironmentSpec struct {
 
 // EnvironmentStatus defines the observed state of Environment
 type EnvironmentStatus struct {
-	// TBD
+	// +kubebuilder:validation:Optional
+
+	EnvironmentId string `json:"environmentID"`
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 
 // Environment is the Schema for the environments API
 type Environment struct {

@@ -24,8 +24,6 @@ const (
 	opsContainerHealthPath    = "/healthz"
 	opsContainerConfigName    = "pipecd-config"
 	opsContainerConfigPath    = "/etc/pipecd-config"
-	opsContainerSecretName    = "pipecd-secret"
-	opsContainerSecretPath    = "/etc/pipecd-secret"
 
 	opsServiceOpsPort       = 9082
 	opsServiceOpsPortName   = "piped-ops"
@@ -84,7 +82,7 @@ func MakeOpsPodSpec(
 	c pipecdv1alpha1.ControlPlane,
 ) (v1.PodSpec, error) {
 
-	return v1.PodSpec{
+	spec := v1.PodSpec{
 		Containers: []corev1.Container{
 			{
 				Name:            opsContainerName,
@@ -125,11 +123,6 @@ func MakeOpsPodSpec(
 						MountPath: opsContainerConfigPath,
 						ReadOnly:  true,
 					},
-					{
-						Name:      opsContainerSecretName,
-						MountPath: opsContainerSecretPath,
-						ReadOnly:  true,
-					},
 				},
 			},
 		},
@@ -144,16 +137,22 @@ func MakeOpsPodSpec(
 					},
 				},
 			},
-			{
-				Name: opsContainerSecretName,
-				VolumeSource: v1.VolumeSource{
-					Secret: &v1.SecretVolumeSource{
-						SecretName: c.Spec.Secret.SecretName,
-					},
-				},
-			},
 		},
-	}, nil
+	}
+
+	for _, v := range c.Spec.VolumeMounts {
+		spec.Volumes = append(spec.Volumes, v.Volume)
+		for idx := 0; idx < len(spec.Containers); idx++ {
+			spec.Containers[idx].VolumeMounts = append(spec.Containers[idx].VolumeMounts, corev1.VolumeMount{
+				Name:        v.Volume.Name,
+				MountPath:   v.MountPath,
+				ReadOnly:    v.ReadOnly,
+				SubPath:     v.SubPath,
+				SubPathExpr: v.SubPathExpr,
+			})
+		}
+	}
+	return spec, nil
 }
 
 func MakeOpsServiceSpec(

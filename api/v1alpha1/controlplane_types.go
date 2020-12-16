@@ -2,9 +2,7 @@ package v1alpha1
 
 import (
 	"encoding/json"
-	"fmt"
 
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -53,7 +51,7 @@ type ControlPlaneSpec struct {
 	RedisVersion string `json:"redisVersion"`
 
 	// secret for PipeCD EncryptionKey & Minio AccessKey and SecretKey
-	Secret *v1.SecretVolumeSource `json:"secret"`
+	VolumeMounts []EmbeddedVolumeMount `json:"volumeMounts"`
 
 	// +kubebuilder:validation:Required
 
@@ -119,6 +117,11 @@ const (
 type genericControlPlaneDataStore struct {
 	Type   ControlPlaneDataStoreType `json:"type"`
 	Config json.RawMessage           `json:"config"`
+
+	// Prevents user-declared fields from deleted by reconcile processing.
+	FirestoreConfig *DataStoreFireStoreConfig `json:"firestoreConfig"`
+	DynamoDBConfig  *DataStoreDynamoDBConfig  `json:"dynamoDbConfig"`
+	MongoDBConfig   *DataStoreMongoDBConfig   `json:"mongoDBConfig"`
 }
 
 type ControlPlaneDataStore struct {
@@ -146,25 +149,28 @@ func (d *ControlPlaneDataStore) MarshalJSON() ([]byte, error) {
 	// TODO: this logic is "or", but should be "xor"
 	switch {
 	case d.FirestoreConfig != nil:
+		gd.FirestoreConfig = d.FirestoreConfig
 		gd.Type = ControlPlaneDataStoreTypeFirestore
 		data, err = json.Marshal(d.FirestoreConfig)
 		if err != nil {
 			return nil, err
 		}
 	case d.DynamoDBConfig != nil:
+		gd.DynamoDBConfig = d.DynamoDBConfig
 		gd.Type = ControlPlaneDataStoreTypeDynamoDB
 		data, err = json.Marshal(d.DynamoDBConfig)
 		if err != nil {
 			return nil, err
 		}
 	case d.MongoDBConfig != nil:
+		gd.MongoDBConfig = d.MongoDBConfig
 		gd.Type = ControlPlaneDataStoreTypeMongoDB
 		data, err = json.Marshal(d.MongoDBConfig)
 		if err != nil {
 			return nil, err
 		}
 	default:
-		return nil, fmt.Errorf("invalid Config")
+		data = []byte("{}")
 	}
 	if err := json.Unmarshal(data, &gd.Config); err != nil {
 		return nil, err
@@ -218,6 +224,11 @@ const (
 type genericControlPlaneFileStore struct {
 	Type   ControlPlaneFileStoreType `json:"type"`
 	Config json.RawMessage           `json:"config"`
+
+	// Prevents user-declared fields from deleted by reconcile processing.
+	GCSConfig   *FileStoreGCSConfig   `json:"gcsConfig"`
+	S3Config    *FileStoreS3Config    `json:"s3Config"`
+	MinioConfig *FileStoreMinioConfig `json:"minioConfig"`
 }
 
 type ControlPlaneFileStore struct {
@@ -245,25 +256,28 @@ func (f *ControlPlaneFileStore) MarshalJSON() ([]byte, error) {
 	// TODO: this logic is "or", but should be "xor"
 	switch {
 	case f.GCSConfig != nil:
+		gf.GCSConfig = f.GCSConfig
 		gf.Type = ControlPlaneFileStoreTypeGCS
 		data, err = json.Marshal(f.GCSConfig)
 		if err != nil {
 			return nil, err
 		}
 	case f.S3Config != nil:
+		gf.S3Config = f.S3Config
 		gf.Type = ControlPlaneFileStoreTypeS3
 		data, err = json.Marshal(f.S3Config)
 		if err != nil {
 			return nil, err
 		}
 	case f.MinioConfig != nil:
+		gf.MinioConfig = f.MinioConfig
 		gf.Type = ControlPlaneFileStoreTypeMinio
 		data, err = json.Marshal(f.MinioConfig)
 		if err != nil {
 			return nil, err
 		}
 	default:
-		return nil, fmt.Errorf("invalid Config")
+		data = []byte("{}")
 	}
 	if err := json.Unmarshal(data, &gf.Config); err != nil {
 		return nil, err
@@ -402,9 +416,6 @@ type ControlPlaneStatus struct {
 
 	// this is equal deployment.status.availableReplicas of ops
 	AvailableOpsReplicas int32 `json:"availableOpsReplicas"`
-
-	// this is equal deployment.status.availableReplicas of minio
-	AvailableMinioReplicas int32 `json:"availableMinioReplicas"`
 }
 
 // +kubebuilder:object:root=true

@@ -3,11 +3,10 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"sync"
+	"reflect"
+	"strings"
 
 	"github.com/go-logr/logr"
-	"github.com/golang/protobuf/ptypes/wrappers"
-	webservicepb "github.com/pipe-cd/pipe/pkg/app/api/service/webservice"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -18,21 +17,20 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	pipecdv1alpha1 "github.com/ShotaKitazawa/pipecd-operator/api/v1alpha1"
 	"github.com/ShotaKitazawa/pipecd-operator/pkg/object"
-	"github.com/ShotaKitazawa/pipecd-operator/pkg/pipecd"
+	"github.com/ShotaKitazawa/pipecd-operator/services"
 )
 
 const (
-	pipedFinalizerName = "piped.finalizers.pipecd.kanatakita.com"
+	pipedControllerName = "piped"
+	pipedFinalizerName  = "piped.finalizers.pipecd.kanatakita.com"
 )
 
 var (
-	pipedKeyCache           string
-	pipedKeyCacheMutex      sync.Mutex
-	encryptionKeyCache      string
-	encryptionKeyCacheMutex sync.Mutex
+	pipedKeyCache string
 )
 
 // PipedReconciler reconciles a Piped object
@@ -54,142 +52,144 @@ func (r *PipedReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *PipedReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
-	log := r.Log.WithValues("namespacedName", req.NamespacedName)
+	log := r.Log.WithValues(pipedControllerName, req.NamespacedName)
 
-	/* Load Piped */
+	/* Load Piped Object */
 	var p pipecdv1alpha1.Piped
-	log.Info("fetching Piped Resource")
 	if err := r.Get(ctx, req.NamespacedName, &p); err != nil {
 		if errors_.IsNotFound(err) {
-			log.Info("Piped not found", "Namespace", req.Namespace, "Name", req.Name)
+			log.Info("Piped not found")
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if !p.ObjectMeta.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(ctx, &p)
+	/* Load Environment Object */
+	var e pipecdv1alpha1.Environment
+	if err := r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: p.Spec.EnvironmentRef.ObjectName}, &e); err != nil {
+		if errors_.IsNotFound(err) {
+			log.Info("Environment not found")
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	return r.reconcile(ctx, &p)
-}
-
-func (r *PipedReconciler) reconcile(ctx context.Context, p *pipecdv1alpha1.Piped) (ctrl.Result, error) {
-	/* Load Secret (key: encryption-key) */
-	if encryptionKeyCache == "" {
-		var secret corev1.Secret
-		if err := r.Get(ctx, types.NamespacedName{Namespace: p.Namespace, Name: p.Spec.EncryptionKeyRef.SecretName}, &secret); err != nil {
-			return ctrl.Result{}, err
-		}
-		encryptionKeyBytes, ok := secret.Data[p.Spec.EncryptionKeyRef.Key]
-		if !ok {
-			return ctrl.Result{}, fmt.Errorf(`no key "%v" in Secret %v`, p.Spec.EncryptionKeyRef.Key, p.Spec.Name)
-		}
-		encryptionKeyCacheMutex.Lock()
-		encryptionKeyCache = string(encryptionKeyBytes)
-		encryptionKeyCacheMutex.Unlock()
-	}
-
-	/* Load & Validate ControlPlaneList */
+	/* Load ControlPlane */
 	var cpList pipecdv1alpha1.ControlPlaneList
-	if err := r.List(ctx, &cpList, &client.ListOptions{Namespace: p.Namespace}); err != nil {
-		r.Log.Info("Piped not found", "Namespace", p.Namespace)
-		return ctrl.Result{}, err
-	} else if len(cpList.Items) != 1 {
-		r.Log.Info("Piped is none of more than 1", "Namespace", p.Namespace)
-		return ctrl.Result{}, fmt.Errorf("Piped is none or more than 1: %v", cpList.Items)
+	if err := r.List(ctx, &cpList); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	} else if len(cpList.Items) == 0 {
+		log.Info("ControlPlane not found")
+		return ctrl.Result{}, nil
 	}
 	cp := cpList.Items[0]
-	serverNN := object.MakeServerNamespacedName(cp.Name, cp.Namespace)
-	pipecdServerAddr := fmt.Sprintf("%s.%s.svc:%d",
-		serverNN.Name,
-		serverNN.Namespace,
-		object.ServerContainerWebServerPort,
-	)
 
-	// generate gRPC Client for Piped
-	client, ctx, err := pipecd.NewClientGenerator(encryptionKeyCache, p.Spec.ProjectID, p.Spec.Insecure).
-		GeneratePipeCdWebServiceClient(ctx, pipecdServerAddr)
+	/* Generate Piped Service */
+	pipedService, ctx, err := services.NewPipedService(ctx, r.Client, req.Namespace, p.Spec.EncryptionKeyRef, p.Spec.ProjectId, p.Spec.Insecure)
 	if err != nil {
-		return ctrl.Result{}, err
+		log.Info("cannot generate Piped WebService gRPC Client")
+		return ctrl.Result{}, nil
 	}
 
-	// list PipeCD Piped & return if Piped already exists
-	resp, err := client.ListPipeds(ctx, &webservicepb.ListPipedsRequest{Options: &webservicepb.ListPipedsRequest_Options{Enabled: &wrappers.BoolValue{Value: true}}})
+	/* Generate Environment Service */
+	environmentService, ctx, err := services.NewEnvironmentService(ctx, r.Client, req.Namespace, p.Spec.EncryptionKeyRef, p.Spec.ProjectId, p.Spec.Insecure)
 	if err != nil {
-		return ctrl.Result{}, err
-	}
-	var pipedId string
-	for _, piped := range resp.Pipeds {
-		if p.Spec.Name == piped.Name {
-			pipedId = piped.Id
-		}
+		log.Info("cannot generate Environment WebService gRPC Client")
+		return ctrl.Result{}, nil
 	}
 
-	if pipedId == "" {
-		// list PipeCD Environments & return if Environment does not exist
-		respListEnvironments, err := client.ListEnvironments(ctx, &webservicepb.ListEnvironmentsRequest{})
+	// delete if DeletionTimestamp is zero && (Finalizers is none || Finalizers contain only pipedFinalizer)
+	if !p.ObjectMeta.DeletionTimestamp.IsZero() &&
+		(len(p.ObjectMeta.Finalizers) == 0 ||
+			reflect.DeepEqual(p.ObjectMeta.Finalizers, []string{pipedFinalizerName})) {
+
+		return r.reconcileDelete(ctx, log, &p, &e, &cp, environmentService, pipedService)
+	}
+
+	return r.reconcile(ctx, log, &p, &e, &cp, environmentService, pipedService)
+}
+
+func (r *PipedReconciler) reconcile(
+	ctx context.Context,
+	log logr.Logger,
+	p *pipecdv1alpha1.Piped,
+	e *pipecdv1alpha1.Environment,
+	cp *pipecdv1alpha1.ControlPlane,
+	environmentService *services.EnvironmentService,
+	pipedService *services.PipedService,
+) (ctrl.Result, error) {
+
+	// list PipeCD Piped & create if Piped does not exist
+	piped, err := pipedService.FindByName(ctx, p.Spec.Name)
+	if err != nil {
+		environment, err := environmentService.Find(ctx, p.Spec.EnvironmentRef.Name)
 		if err != nil {
+			log.Error(err, err.Error())
 			return ctrl.Result{}, err
 		}
-
-		// get Environments ID
-		var envIds []string
-		for _, env := range respListEnvironments.Environments {
-			if env.Name == p.Spec.Environment {
-				envIds = append(envIds, env.Id)
-			}
-		}
-		if len(envIds) == 0 {
-			return ctrl.Result{}, fmt.Errorf("Environment %v does not exist", p.Spec.Name)
-		}
-
-		// register PipeCD Piped
-		respRegisterPiped, err := client.RegisterPiped(ctx, &webservicepb.RegisterPipedRequest{
-			Name:   p.Spec.Name,
-			Desc:   p.Spec.Description,
-			EnvIds: envIds,
-		})
+		p, err := pipedService.Create(ctx, p.Spec.Name, p.Spec.Description, environment.Id)
 		if err != nil {
+			log.Error(err, err.Error())
 			return ctrl.Result{}, err
 		}
-		pipedId = respRegisterPiped.Id
-		pipedKeyCacheMutex.Lock()
-		pipedKeyCache = respRegisterPiped.Key
-		pipedKeyCacheMutex.Unlock()
+		piped = p
+		pipedKeyCache = piped.Key
+	} else {
+		if pipedKeyCache == "" {
+			err := fmt.Errorf("pipedKeyCache is none. Please disable piped configuration from WebUI.")
+			log.Error(err, err.Error())
+			return ctrl.Result{}, err
+		}
+		piped.Key = pipedKeyCache
 	}
 
 	// generate K8s Objects for Piped
-	if pipedKeyCache == "" {
-		err := fmt.Errorf("pipedKeyCache is none. Please disable piped configuration from WebUI.")
-		r.Log.Error(err, err.Error())
-		return ctrl.Result{}, err
-	}
-	if result, err := r.reconcilePiped(ctx, p, pipedId, pipedKeyCache); err != nil {
+	if result, err := r.reconcilePipedObject(ctx, log, p, piped.Id, pipedKeyCache, piped.EnvIds); err != nil {
+		log.Error(err, err.Error())
 		return result, err
 	}
 
-	// update Piped Object
-	var finalizerExists bool
-	for _, finalizer := range p.ObjectMeta.Finalizers {
-		if finalizer == pipedFinalizerName {
-			finalizerExists = true
-		}
+	// add Piped finalizer to Piped Object
+	controllerutil.AddFinalizer(p, pipedFinalizerName)
+	patchPiped := generatePatchFinalizersObject(p.GroupVersionKind(), p.Namespace, p.Name, p.ObjectMeta.Finalizers)
+	// TODO: 複数 controller が 1object を操作する場合 server-side apply だと conflict する
+	if err := r.Patch(ctx, patchPiped, client.Apply, &client.PatchOptions{FieldManager: pipedControllerName}); err != nil {
+		log.Error(err, err.Error())
+		return ctrl.Result{}, err
 	}
-	if !finalizerExists {
-		p.ObjectMeta.Finalizers = append(p.ObjectMeta.Finalizers, pipedFinalizerName)
-		if err := r.Update(ctx, p); err != nil {
-			return ctrl.Result{}, err
-		}
-		// record to event
-		r.Recorder.Eventf(p, corev1.EventTypeNormal, "Updated", "Update Piped.Metadata.Finalizer")
+
+	// add Piped finalizer to Environment Object
+	/* TODO
+	patchEnv := generatePatchFinalizersObject(e.GroupVersionKind(), e.Namespace, e.Name, e.ObjectMeta.Finalizers)
+	controllerutil.AddFinalizer(patchEnv, pipedFinalizerName)
+	if err := r.Patch(ctx, patchEnv, client.Merge, &client.PatchOptions{FieldManager: pipedControllerName}); err != nil {
+		log.Error(err, err.Error())
+		return ctrl.Result{}, err
 	}
+	*/
+
+	// add Piped finalizer to ControlPlane Object
+	/* TODO
+	patchCp := generatePatchFinalizersObject(cp.GroupVersionKind(), cp.Namespace, cp.Name, cp.ObjectMeta.Finalizers)
+	controllerutil.AddFinalizer(patchCp, pipedFinalizerName)
+	if err := r.Patch(ctx, patchCp, client.Merge, &client.PatchOptions{FieldManager: pipedControllerName}); err != nil {
+		log.Error(err, err.Error())
+		return ctrl.Result{}, err
+	}
+	*/
 
 	return ctrl.Result{}, nil
 }
 
-func (r *PipedReconciler) reconcilePiped(ctx context.Context, p *pipecdv1alpha1.Piped, pipedId, pipedKey string) (ctrl.Result, error) {
-	log := r.Log.WithValues("component", "piped")
+func (r *PipedReconciler) reconcilePipedObject(
+	ctx context.Context,
+	log logr.Logger,
+	p *pipecdv1alpha1.Piped,
+	pipedId,
+	pipedKey string,
+	environmentIds []string,
+) (ctrl.Result, error) {
+	log = log.WithValues("component", "piped")
 	pipedNN := object.MakePipedNamespacedName(p.Name, p.Namespace)
 
 	/* Generate & Apply piped ServiceAccount */
@@ -237,7 +237,7 @@ func (r *PipedReconciler) reconcilePiped(ctx context.Context, p *pipecdv1alpha1.
 		},
 	}
 	if _, err := ctrl.CreateOrUpdate(ctx, r, pipedConfigMap, func() (err error) {
-		pipedConfigMap.BinaryData, err = object.MakePipedConfigMapData(*p, pipedId)
+		pipedConfigMap.Data, err = object.MakePipedConfigMapData(*p, pipedId)
 		if err != nil {
 			return err
 		}
@@ -262,7 +262,7 @@ func (r *PipedReconciler) reconcilePiped(ctx context.Context, p *pipecdv1alpha1.
 		pipedClusterRole.Rules = object.MakePipedClusterRoleRules(*p)
 		return nil
 	}); err != nil {
-		log.Error(err, "unable to ensure deployment is correct")
+		log.Error(err, "unable to ensure ClusterRole is correct")
 		return ctrl.Result{}, err
 	}
 
@@ -278,7 +278,7 @@ func (r *PipedReconciler) reconcilePiped(ctx context.Context, p *pipecdv1alpha1.
 		pipedClusterRoleBinding.Subjects = object.MakePipedClusterRoleBindingSubjects(*p)
 		return nil
 	}); err != nil {
-		log.Error(err, "unable to ensure deployment is correct")
+		log.Error(err, "unable to ensure ClusterRoleBinding is correct")
 		return ctrl.Result{}, err
 	}
 
@@ -319,7 +319,7 @@ func (r *PipedReconciler) reconcilePiped(ctx context.Context, p *pipecdv1alpha1.
 		},
 	}
 	if _, err := ctrl.CreateOrUpdate(ctx, r, pipedDeployment, func() (err error) {
-		pipedDeployment.Spec, err = object.MakePipedDeploymentSpec(*p)
+		pipedDeployment.Spec, err = object.MakePipedDeploymentSpec(*p, pipedId)
 		if err != nil {
 			return err
 		}
@@ -329,7 +329,7 @@ func (r *PipedReconciler) reconcilePiped(ctx context.Context, p *pipecdv1alpha1.
 		}
 		return nil
 	}); err != nil {
-		log.Error(err, "unable to ensure deployment is correct")
+		log.Error(err, "unable to ensure Deployment is correct")
 		return ctrl.Result{}, err
 	}
 
@@ -342,7 +342,7 @@ func (r *PipedReconciler) reconcilePiped(ctx context.Context, p *pipecdv1alpha1.
 
 	/* Update status piped Deployment */
 	availableReplicas := pipedDeploymentApplied.Status.AvailableReplicas
-	if availableReplicas != p.Status.AvailableReplicas {
+	if p.Status.AvailableReplicas != availableReplicas {
 		p.Status.AvailableReplicas = availableReplicas
 		if err := r.Status().Update(ctx, p); err != nil {
 			log.Error(err, "unable to update Piped status")
@@ -351,7 +351,7 @@ func (r *PipedReconciler) reconcilePiped(ctx context.Context, p *pipecdv1alpha1.
 		/* Record to event */
 		r.Recorder.Eventf(p, corev1.EventTypeNormal, "Updated", "Update Piped.status.availablePipedReplicas: %d", p.Status.AvailableReplicas)
 	}
-	if pipedId != p.Status.PipedId {
+	if p.Status.PipedId != pipedId {
 		p.Status.PipedId = pipedId
 		if err := r.Status().Update(ctx, p); err != nil {
 			log.Error(err, "unable to update Piped status")
@@ -360,69 +360,64 @@ func (r *PipedReconciler) reconcilePiped(ctx context.Context, p *pipecdv1alpha1.
 		/* Record to event */
 		r.Recorder.Eventf(p, corev1.EventTypeNormal, "Updated", "Update Piped.status.pipedId: %d", p.Status.AvailableReplicas)
 	}
+	envIdsSlice := strings.Join(environmentIds, ",")
+	if p.Status.EnvironmentIds != envIdsSlice {
+		p.Status.EnvironmentIds = envIdsSlice
+		if err := r.Status().Update(ctx, p); err != nil {
+			log.Error(err, "unable to update Piped status")
+			return ctrl.Result{}, err
+		}
+		/* Record to event */
+		r.Recorder.Eventf(p, corev1.EventTypeNormal, "Updated", "Update Piped.status.envIds: %d", p.Status.EnvironmentIds)
+	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *PipedReconciler) reconcileDelete(ctx context.Context, p *pipecdv1alpha1.Piped) (ctrl.Result, error) {
-	/* Load Secret (key: encryption-key) */
-	if encryptionKeyCache == "" {
-		var secret corev1.Secret
-		if err := r.Get(ctx, types.NamespacedName{Namespace: p.Namespace, Name: p.Spec.EncryptionKeyRef.SecretName}, &secret); err != nil {
-			return ctrl.Result{}, err
-		}
-		encryptionKeyBytes, ok := secret.Data[p.Spec.EncryptionKeyRef.Key]
-		if !ok {
-			return ctrl.Result{}, fmt.Errorf(`no key "%v" in Secret %v`, p.Spec.EncryptionKeyRef.Key, p.Spec.Name)
-		}
-		encryptionKeyCacheMutex.Lock()
-		encryptionKeyCache = string(encryptionKeyBytes)
-		encryptionKeyCacheMutex.Unlock()
-	}
-
-	/* Load & Validate ControlPlaneList */
-	var cpList pipecdv1alpha1.ControlPlaneList
-	if err := r.List(ctx, &cpList, &client.ListOptions{Namespace: p.Namespace}); err != nil {
-		r.Log.Info("Piped not found", "Namespace", p.Namespace)
-		return ctrl.Result{}, err
-	} else if len(cpList.Items) != 1 {
-		r.Log.Info("Piped is none or more than 1", "Namespace", p.Namespace)
-		return ctrl.Result{}, fmt.Errorf("Piped is none or more than 1: %v", cpList.Items)
-	}
-	cp := cpList.Items[0]
-	serverNN := object.MakeServerNamespacedName(cp.Name, cp.Namespace)
-	pipecdServerAddr := fmt.Sprintf("%s.%s.svc:%d",
-		serverNN.Name,
-		serverNN.Namespace,
-		object.ServerContainerWebServerPort,
-	)
-
-	// generate gRPC Client for Piped
-	client, ctx, err := pipecd.NewClientGenerator(encryptionKeyCache, p.Spec.ProjectID, p.Spec.Insecure).
-		GeneratePipeCdWebServiceClient(ctx, pipecdServerAddr)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// get PipedID from Piped.status.pipedID
-	pipedId := p.Status.PipedId
+func (r *PipedReconciler) reconcileDelete(
+	ctx context.Context,
+	log logr.Logger,
+	p *pipecdv1alpha1.Piped,
+	e *pipecdv1alpha1.Environment,
+	cp *pipecdv1alpha1.ControlPlane,
+	environmentService *services.EnvironmentService,
+	pipedService *services.PipedService,
+) (ctrl.Result, error) {
 
 	// disable Piped
-	if _, err := client.DisablePiped(ctx, &webservicepb.DisablePipedRequest{PipedId: pipedId}); err != nil {
+	if p.Status.PipedId != "" {
+		if err := pipedService.Delete(ctx, p.Status.PipedId); err != nil {
+			log.Error(err, err.Error())
+			return ctrl.Result{}, err
+		}
+	}
+
+	// remove Piped finalizer from Piped Object
+	controllerutil.RemoveFinalizer(p, pipedFinalizerName)
+	patchPiped := generatePatchFinalizersObject(p.GroupVersionKind(), p.Namespace, p.Name, p.ObjectMeta.Finalizers)
+	// TODO: 複数 controller が 1object を操作する場合 server-side apply だと conflict する
+	if err := r.Patch(ctx, patchPiped, client.Apply, &client.PatchOptions{FieldManager: pipedControllerName}); err != nil {
+		log.Error(err, err.Error())
 		return ctrl.Result{}, err
 	}
 
-	// remove Finalizer of Piped Object
-	var tmp []string
-	for _, val := range p.ObjectMeta.Finalizers {
-		if val != pipedFinalizerName {
-			tmp = append(tmp, val)
-		}
-	}
-	p.ObjectMeta.Finalizers = tmp
-	if err := r.Update(context.Background(), p); err != nil {
+	// remove Piped finalizer from Environment Object
+	/* TODO
+	patchEnv := generatePatchFinalizersObject(e.GroupVersionKind(), e.Namespace, e.Name, e.ObjectMeta.Finalizers)
+	if err := r.Patch(ctx, patchEnv, client.Merge, &client.PatchOptions{FieldManager: pipedControllerName}); err != nil {
+		log.Error(err, err.Error())
 		return ctrl.Result{}, err
 	}
+	*/
+
+	// remove Piped finalizer from ControlPlane Object
+	/* TODO
+	patchCp := generatePatchFinalizersObject(cp.GroupVersionKind(), cp.Namespace, cp.Name, cp.ObjectMeta.Finalizers)
+	if err := r.Patch(ctx, patchCp, client.Merge, &client.PatchOptions{FieldManager: pipedControllerName}); err != nil {
+		log.Error(err, err.Error())
+		return ctrl.Result{}, err
+	}
+	*/
 
 	return ctrl.Result{}, nil
 }

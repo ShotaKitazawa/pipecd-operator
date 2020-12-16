@@ -23,15 +23,15 @@ type PipedSpec struct {
 
 	// +kubebuilder:validation:Required
 
-	Environment string `json:"environment"`
+	ProjectId string `json:"projectID"`
 
 	// +kubebuilder:validation:Required
 
-	ProjectID string `json:"projectID"`
+	EnvironmentRef EnvironmentRef `json:"environmentRef"`
 
 	// +kubebuilder:validation:Required
 
-	EncryptionKeyRef EmbeddedSecretKeySelector `json:"encryptionKeyRef"`
+	EncryptionKeyRef EmbeddedSecretKeyRef `json:"encryptionKeyRef"`
 
 	// +kubebuilder:validation:Optional
 
@@ -493,18 +493,6 @@ type AnalysisProviderStackdriverConfig struct {
 	ServiceAccountFile string `json:"serviceAccountFile"`
 }
 
-// PipedStatus defines the observed state of Piped
-type PipedStatus struct {
-	// this is equal deployment.status.availableReplicas of piped
-	AvailableReplicas int32 `json:"availableReplicas"`
-
-	// Environment ID
-	EnvironmentId string `json:"environmentID"`
-
-	// Piped ID
-	PipedId string `json:"pipedID"`
-}
-
 type Notifications struct {
 
 	// +kubebuilder:validation:Optional
@@ -602,6 +590,24 @@ type NotificationReceiverWebhook struct {
 	// +kubebuilder:validation:Required
 
 	URL string `json:"url"`
+}
+
+// PipedStatus defines the observed state of Piped
+type PipedStatus struct {
+	// +kubebuilder:validation:Optional
+
+	// this is equal deployment.status.availableReplicas of piped
+	AvailableReplicas int32 `json:"availableReplicas"`
+
+	// +kubebuilder:validation:Optional
+
+	// Environment ID
+	EnvironmentIds string `json:"environmentID"`
+
+	// +kubebuilder:validation:Optional
+
+	// Piped ID
+	PipedId string `json:"pipedID"`
 }
 
 // +kubebuilder:object:root=true

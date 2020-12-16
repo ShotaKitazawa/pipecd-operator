@@ -30,8 +30,6 @@ const (
 	gatewayContainerHealthPath      = "/server_info"
 	gatewayContainerConfigName      = "envoy-config"
 	gatewayContainerConfigPath      = "/etc/envoy"
-	gatewayContainerSecretName      = "pipecd-secret"
-	gatewayContainerSecretPath      = "/etc/pipecd-secret"
 
 	gatewayServicePort     = 9095
 	gatewayServicePortName = "envoy-admin"
@@ -96,7 +94,7 @@ func MakeGatewayPodSpec(
 		image = fmt.Sprintf("%s:%s", gatewayContainerImage, gatewayContainerImageTagDefault)
 	}
 
-	return v1.PodSpec{
+	spec := v1.PodSpec{
 		Containers: []corev1.Container{
 			{
 				Name:            gatewayContainerName,
@@ -140,11 +138,6 @@ func MakeGatewayPodSpec(
 						MountPath: gatewayContainerConfigPath,
 						ReadOnly:  true,
 					},
-					{
-						Name:      gatewayContainerSecretName,
-						MountPath: gatewayContainerSecretPath,
-						ReadOnly:  true,
-					},
 				},
 			},
 		},
@@ -159,16 +152,22 @@ func MakeGatewayPodSpec(
 					},
 				},
 			},
-			{
-				Name: gatewayContainerSecretName,
-				VolumeSource: v1.VolumeSource{
-					Secret: &v1.SecretVolumeSource{
-						SecretName: c.Spec.Secret.SecretName,
-					},
-				},
-			},
 		},
-	}, nil
+	}
+
+	for _, v := range c.Spec.VolumeMounts {
+		spec.Volumes = append(spec.Volumes, v.Volume)
+		for idx := 0; idx < len(spec.Containers); idx++ {
+			spec.Containers[idx].VolumeMounts = append(spec.Containers[idx].VolumeMounts, corev1.VolumeMount{
+				Name:        v.Volume.Name,
+				MountPath:   v.MountPath,
+				ReadOnly:    v.ReadOnly,
+				SubPath:     v.SubPath,
+				SubPathExpr: v.SubPathExpr,
+			})
+		}
+	}
+	return spec, nil
 }
 
 func MakeGatewayServiceSpec(
@@ -187,11 +186,11 @@ func MakeGatewayServiceSpec(
 	}, nil
 }
 
-func MakeGatewayConfigMapBinaryData(
+func MakeGatewayConfigMapData(
 	c pipecdv1alpha1.ControlPlane,
-) (map[string][]byte, error) {
+) (map[string]string, error) {
 
-	data := make(map[string][]byte)
+	data := make(map[string]string)
 
 	for _, filename := range gatewayAssetFileNames {
 		f, err := embed.Assets.Open(filename)
@@ -206,7 +205,7 @@ func MakeGatewayConfigMapBinaryData(
 		bStr := string(b)
 		bStr = strings.ReplaceAll(bStr, "ADDRESS_SERVER", MakeServerNamespacedName(c.Name, c.Namespace).Name)
 
-		data[filepath.Base(filename)] = []byte(bStr)
+		data[filepath.Base(filename)] = bStr
 	}
 
 	return data, nil

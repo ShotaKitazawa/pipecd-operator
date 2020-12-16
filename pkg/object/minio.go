@@ -15,11 +15,13 @@ import (
 const (
 	minioReplicas int32 = 1
 
-	minioContainerName            = "minio"
-	minioContainerImage           = "minio/minio"
-	minioContainerImageTagDefault = "RELEASE.2020-08-26T00-00-49Z"
-	minioContainerPortName        = "minio"
-	minioContainerPort            = 9000
+	minioContainerName                = "minio"
+	minioContainerImage               = "minio/minio"
+	minioContainerImageTagDefault     = "RELEASE.2020-08-26T00-00-49Z"
+	minioContainerPortName            = "minio"
+	minioContainerPort                = 9000
+	minioContainerSecretKey_AccessKey = "minio-access-key"
+	minioContainerSecretkey_SecretKey = "minio-secret-key"
 
 	minioVolumeName = "volume"
 
@@ -108,7 +110,7 @@ func MakeMinioPodSpec(
 								LocalObjectReference: v1.LocalObjectReference{
 									Name: m.Spec.Secret.SecretName,
 								},
-								Key: SecretKeyMinioAccessKey,
+								Key: minioContainerSecretKey_AccessKey,
 							},
 						},
 					},
@@ -119,7 +121,7 @@ func MakeMinioPodSpec(
 								LocalObjectReference: v1.LocalObjectReference{
 									Name: m.Spec.Secret.SecretName,
 								},
-								Key: SecretKeyMinioSecretKey,
+								Key: minioContainerSecretkey_SecretKey,
 							},
 						},
 					},

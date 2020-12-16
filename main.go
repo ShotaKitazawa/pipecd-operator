@@ -99,6 +99,15 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Piped")
 		os.Exit(1)
 	}
+	if err = (&controllers.ApplicationReconciler{
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("controllers").WithName("Application"),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("application-controler"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Application")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")

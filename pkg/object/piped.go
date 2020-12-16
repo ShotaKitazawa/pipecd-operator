@@ -63,6 +63,7 @@ func MakePipedNamespacedName(name, namespace string) types.NamespacedName {
 
 func MakePipedDeploymentSpec(
 	c pipecdv1alpha1.Piped,
+	pipedId string,
 ) (appsv1.DeploymentSpec, error) {
 	var replicas int32 = pipedMinReplicas
 
@@ -82,6 +83,9 @@ func MakePipedDeploymentSpec(
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: generatePipedLabel(),
+				Annotations: map[string]string{
+					"piped-id": pipedId,
+				},
 			},
 			Spec: podSpec,
 		},
@@ -199,14 +203,14 @@ func MakePipedSecretData(
 func MakePipedConfigMapData(
 	p pipecdv1alpha1.Piped,
 	pipedId string,
-) (map[string][]byte, error) {
-	cm := make(map[string][]byte)
+) (map[string]string, error) {
+	cm := make(map[string]string)
 	config := pipecdv1alpha1.PipedConfig{
 		Kind:       "Piped",
 		APIVersion: ConfigMapPipedApiVersion,
 		Spec:       p.Spec.Config,
 	}
-	config.Spec.ProjectID = p.Spec.ProjectID
+	config.Spec.ProjectID = p.Spec.ProjectId
 	config.Spec.PipedKeyFile = filepath.Join(pipedContainerSecretPath, pipedSecretKeyPipedKey)
 	config.Spec.PipedID = pipedId
 
@@ -215,7 +219,7 @@ func MakePipedConfigMapData(
 		return nil, err
 	}
 
-	cm[ConfigMapPipedFilename] = data
+	cm[ConfigMapPipedFilename] = string(data)
 	return cm, nil
 }
 

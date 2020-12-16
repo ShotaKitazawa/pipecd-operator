@@ -26,9 +26,9 @@ const (
 	ServerContainerAdminPortName       = "admin"
 	ServerContainerAdminPort           = 9085
 	ServerContainerHealthPath          = "/healthz"
-	ServerContainerConfigName          = "pipecd-config"
+	ServerContainerConfigName          = "embedded-pipecd-config"
 	ServerContainerConfigPath          = "/etc/pipecd-config"
-	ServerContainerSecretName          = "pipecd-secret"
+	ServerContainerSecretName          = "embedded-pipecd-secret"
 	ServerContainerSecretPath          = "/etc/pipecd-secret"
 
 	serverServicePipedServerPort     = 9080
@@ -100,7 +100,7 @@ func MakeServerPodSpec(
 		fmt.Sprintf("--cache-address=%s:%d", MakeCacheNamespacedName(c.Name, c.Namespace).Name, cacheServicePort),
 	)
 
-	return v1.PodSpec{
+	spec := v1.PodSpec{
 		Containers: []corev1.Container{
 			{
 				Name:            ServerContainerName,
@@ -174,12 +174,27 @@ func MakeServerPodSpec(
 				Name: ServerContainerSecretName,
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
-						SecretName: c.Spec.Secret.SecretName,
+						SecretName: SecretName,
 					},
 				},
 			},
 		},
-	}, nil
+	}
+
+	for _, v := range c.Spec.VolumeMounts {
+		spec.Volumes = append(spec.Volumes, v.Volume)
+		for idx := 0; idx < len(spec.Containers); idx++ {
+			spec.Containers[idx].VolumeMounts = append(spec.Containers[idx].VolumeMounts, corev1.VolumeMount{
+				Name:        v.Volume.Name,
+				MountPath:   v.MountPath,
+				ReadOnly:    v.ReadOnly,
+				SubPath:     v.SubPath,
+				SubPathExpr: v.SubPathExpr,
+			})
+		}
+	}
+
+	return spec, nil
 }
 
 func MakeServerServiceSpec(

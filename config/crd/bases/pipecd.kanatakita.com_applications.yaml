@@ -6,20 +6,18 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.2.4
   creationTimestamp: null
-  name: environments.pipecd.kanatakita.com
+  name: applications.pipecd.kanatakita.com
 spec:
   group: pipecd.kanatakita.com
   names:
-    kind: Environment
-    listKind: EnvironmentList
-    plural: environments
-    singular: environment
+    kind: Application
+    listKind: ApplicationList
+    plural: applications
+    singular: application
   scope: Namespaced
-  subresources:
-    status: {}
   validation:
     openAPIV3Schema:
-      description: Environment is the Schema for the environments API
+      description: Application is the Schema for the applications API
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -34,9 +32,11 @@ spec:
         metadata:
           type: object
         spec:
-          description: EnvironmentSpec defines the desired state of Environment
+          description: ApplicationSpec defines the desired state of Application
           properties:
-            description:
+            cloudProvider:
+              type: string
+            configFilename:
               type: string
             encryptionKeyRef:
               properties:
@@ -55,23 +55,51 @@ spec:
               - key
               - secretName
               type: object
+            environmentRef:
+              properties:
+                name:
+                  type: string
+                objectName:
+                  type: string
+              required:
+              - name
+              - objectName
+              type: object
             insecure:
               type: boolean
+            kind:
+              type: string
             name:
               type: string
+            path:
+              type: string
+            pipedRef:
+              properties:
+                name:
+                  type: string
+                objectName:
+                  type: string
+              required:
+              - name
+              - objectName
+              type: object
             projectID:
               type: string
+            repository:
+              type: string
           required:
-          - description
+          - cloudProvider
           - encryptionKeyRef
+          - environmentRef
+          - kind
           - name
+          - path
+          - pipedRef
           - projectID
+          - repository
           type: object
         status:
-          description: EnvironmentStatus defines the observed state of Environment
-          properties:
-            environmentID:
-              type: string
+          description: ApplicationStatus defines the observed state of Application
           type: object
       type: object
   version: v1alpha1

@@ -8,5 +8,5 @@ spec:
   projectID: quickstart
   insecure: true
   encryptionKeyRef:
-    secretName: secret-sample
+    secretName: pipecd
     key: encryption-key

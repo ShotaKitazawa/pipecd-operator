@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"reflect"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -14,12 +15,16 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	pipecdv1alpha1 "github.com/ShotaKitazawa/pipecd-operator/api/v1alpha1"
 	"github.com/ShotaKitazawa/pipecd-operator/pkg/object"
 )
 
-// var reconcileTimeoutSecond = 30 * time.Second
+const (
+	controlPlaneControllerName = "controlplane"
+	controlPlaneFinalizerName  = "controlplane.finalizers.pipecd.kanatakita.com"
+)
 
 // ControlPlaneReconciler reconciles a ControlPlane object
 type ControlPlaneReconciler struct {
@@ -40,64 +45,36 @@ func (r *ControlPlaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *ControlPlaneReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
-	log := r.Log.WithValues("controlplane", req.NamespacedName)
+	log := r.Log.WithValues(controlPlaneControllerName, req.NamespacedName)
 
 	/* Load ControlPlane */
 	var cp pipecdv1alpha1.ControlPlane
 	log.Info("fetching ControlPlane Resource")
 	if err := r.Get(ctx, req.NamespacedName, &cp); err != nil {
 		if errors_.IsNotFound(err) {
-			r.Log.Info("ControlPlane not found", "Namespace", req.Namespace, "Name", req.Name)
+			log.Info("ControlPlane not found")
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	/* TODO: use gorouting
-		var wg sync.WaitGroup
-		wg.Add(1)
-		errStreamGeneral := make(chan error)
-		go r.reconcileGeneral(ctx, &wg, errStreamGeneral, &cp)
-		wg.Add(1)
-		errStreamGateway := make(chan error)
-		go r.reconcileGateway(ctx, &wg, errStreamGateway, &cp)
-		wg.Add(1)
-		errStreamApi := make(chan error)
-		go r.reconcileApi(ctx, &wg, errStreamApi, &cp)
+	// delete if DeletionTimestamp is zero && (Finalizers is none || Finalizers contain only controlPlaneFinalizer)
+	if !cp.ObjectMeta.DeletionTimestamp.IsZero() &&
+		(len(cp.ObjectMeta.Finalizers) == 0 ||
+			reflect.DeepEqual(cp.ObjectMeta.Finalizers, []string{controlPlaneFinalizerName})) {
+		return r.reconcileDelete(ctx, log, &cp)
+	}
 
-		terminated := make(chan interface{})
-		go func() {
-			wg.Wait()
-			close(terminated)
-		}()
+	return r.reconcile(ctx, log, &cp)
+}
 
-		var err error
-	L:
-		for {
-			select {
-			case <-terminated: // ok
-				break L
-			case err = <-errStreamGeneral:
-				<-terminated // wait until close all goroutine
-				break L
-			case err = <-errStreamGateway:
-				<-terminated // wait until close all goroutine
-				break L
-			case err = <-errStreamApi:
-				<-terminated // wait until close all goroutine
-				break L
-			case <-time.After(reconcileTimeoutSecond):
-				err = fmt.Errorf("Reconcile process time out: something error occurred. (and occurring that leak goroutine)")
-				break L
-			default:
-				time.Sleep(time.Microsecond)
-			}
-		}
-		close(errStreamGeneral)
-		close(errStreamGateway)
-		close(errStreamApi)
-		return ctrl.Result{}, err
-	*/
+func (r *ControlPlaneReconciler) reconcile(
+	ctx context.Context,
+	log logr.Logger,
+	cp *pipecdv1alpha1.ControlPlane,
+) (ctrl.Result, error) {
+
+	// TODO: use goroutine
 
 	var err error
 	var wg sync.WaitGroup
@@ -109,7 +86,7 @@ func (r *ControlPlaneReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	{ // general
 		wg.Add(1)
 		errStreamGeneral := make(chan error)
-		go r.reconcileGeneral(ctx, &wg, errStreamGeneral, &cp)
+		go r.reconcileGeneral(ctx, log, &wg, errStreamGeneral, cp)
 		select {
 		case <-terminated:
 		case err = <-errStreamGeneral:
@@ -119,7 +96,7 @@ func (r *ControlPlaneReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	{ // gateway
 		wg.Add(1)
 		errStreamGateway := make(chan error)
-		go r.reconcileGateway(ctx, &wg, errStreamGateway, &cp)
+		go r.reconcileGateway(ctx, log, &wg, errStreamGateway, cp)
 		select {
 		case <-terminated:
 		case err = <-errStreamGateway:
@@ -129,7 +106,7 @@ func (r *ControlPlaneReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	{ // server
 		wg.Add(1)
 		errStreamApi := make(chan error)
-		go r.reconcileServer(ctx, &wg, errStreamApi, &cp)
+		go r.reconcileServer(ctx, log, &wg, errStreamApi, cp)
 		select {
 		case <-terminated:
 		case err = <-errStreamApi:
@@ -139,7 +116,7 @@ func (r *ControlPlaneReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	{ // cache
 		wg.Add(1)
 		errStreamCache := make(chan error)
-		go r.reconcileCache(ctx, &wg, errStreamCache, &cp)
+		go r.reconcileCache(ctx, log, &wg, errStreamCache, cp)
 		select {
 		case <-terminated:
 		case err = <-errStreamCache:
@@ -149,7 +126,7 @@ func (r *ControlPlaneReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	{ // web
 		wg.Add(1)
 		errStreamOps := make(chan error)
-		go r.reconcileOps(ctx, &wg, errStreamOps, &cp)
+		go r.reconcileOps(ctx, log, &wg, errStreamOps, cp)
 		select {
 		case <-terminated:
 		case err = <-errStreamOps:
@@ -157,22 +134,34 @@ func (r *ControlPlaneReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		}
 	}
 
+	// add ControlPlane finalizer to ControlPlane Object
+	controllerutil.AddFinalizer(cp, controlPlaneFinalizerName)
+	patch := generatePatchFinalizersObject(cp.GroupVersionKind(), cp.Namespace, cp.Name, cp.ObjectMeta.Finalizers)
+	if err := r.Patch(ctx, patch, client.Merge, &client.PatchOptions{FieldManager: controlPlaneControllerName}); err != nil {
+		log.Error(err, err.Error())
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 
-func (r *ControlPlaneReconciler) reconcileGeneral(ctx context.Context, wg *sync.WaitGroup, errStream chan<- error, cp *pipecdv1alpha1.ControlPlane) {
+func (r *ControlPlaneReconciler) reconcileGeneral(
+	ctx context.Context,
+	log logr.Logger,
+	wg *sync.WaitGroup,
+	errStream chan<- error,
+	cp *pipecdv1alpha1.ControlPlane,
+) {
 	defer (*wg).Done()
-	log := r.Log.WithValues("component", "general")
+	log = log.WithValues("component", "general")
 
-	/* Generate ConfigMap (NamespacedName) */
+	/* Apply ConfigMap */
 	cm := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      object.ConfigMapName,
 			Namespace: cp.Namespace,
 		},
 	}
-
-	/* Apply ConfigMap */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, cm, func() (err error) {
 		cm.BinaryData, err = object.MakeConfigMapBinaryData(*cp)
 		if err != nil {
@@ -189,15 +178,33 @@ func (r *ControlPlaneReconciler) reconcileGeneral(ctx context.Context, wg *sync.
 		return
 	}
 
-	/* Generate Service (NamespacedName) */
+	/* Apply server Secret */
+	serverSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      object.SecretName,
+			Namespace: cp.Namespace,
+		},
+	}
+	if _, err := ctrl.CreateOrUpdate(ctx, r, serverSecret, func() (err error) {
+		serverSecret.StringData = object.MakeSecretData(*cp)
+		if err := ctrl.SetControllerReference(cp, serverSecret, r.Scheme); err != nil {
+			log.Error(err, "unable to set ownerReference from ControlPlane to Secret")
+			return err
+		}
+		return nil
+	}); err != nil {
+		log.Error(err, "unable to ensure Secret is correct")
+		errStream <- err
+		return
+	}
+
+	/* Apply Service */
 	service := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      object.ServiceName,
 			Namespace: cp.Namespace,
 		},
 	}
-
-	/* Apply Service */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, service, func() (err error) {
 		service.Spec, err = object.MakeServiceSpec(*cp)
 		if err != nil {
@@ -221,12 +228,17 @@ func (r *ControlPlaneReconciler) reconcileGeneral(ctx context.Context, wg *sync.
 		errStream <- err
 		return
 	}
-
 }
 
-func (r *ControlPlaneReconciler) reconcileGateway(ctx context.Context, wg *sync.WaitGroup, errStream chan<- error, cp *pipecdv1alpha1.ControlPlane) {
+func (r *ControlPlaneReconciler) reconcileGateway(
+	ctx context.Context,
+	log logr.Logger,
+	wg *sync.WaitGroup,
+	errStream chan<- error,
+	cp *pipecdv1alpha1.ControlPlane,
+) {
 	defer (*wg).Done()
-	log := r.Log.WithValues("component", "gateway")
+	log = log.WithValues("component", "gateway")
 	gatewayNN := object.MakeGatewayNamespacedName(cp.Name, cp.Namespace)
 
 	/* Generate gateway ConfigMap (NamespacedName) */
@@ -239,7 +251,7 @@ func (r *ControlPlaneReconciler) reconcileGateway(ctx context.Context, wg *sync.
 
 	/* Apply gateway ConfigMap */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, gatewayConfigMap, func() (err error) {
-		gatewayConfigMap.BinaryData, err = object.MakeGatewayConfigMapBinaryData(*cp)
+		gatewayConfigMap.Data, err = object.MakeGatewayConfigMapData(*cp)
 		if err != nil {
 			return err
 		}
@@ -274,7 +286,7 @@ func (r *ControlPlaneReconciler) reconcileGateway(ctx context.Context, wg *sync.
 		}
 		return nil
 	}); err != nil {
-		log.Error(err, "unable to ensure deployment is correct")
+		log.Error(err, "unable to ensure Deployment is correct")
 		errStream <- err
 		return
 	}
@@ -335,20 +347,24 @@ func (r *ControlPlaneReconciler) reconcileGateway(ctx context.Context, wg *sync.
 	}
 }
 
-func (r *ControlPlaneReconciler) reconcileServer(ctx context.Context, wg *sync.WaitGroup, errStream chan<- error, cp *pipecdv1alpha1.ControlPlane) {
+func (r *ControlPlaneReconciler) reconcileServer(
+	ctx context.Context,
+	log logr.Logger,
+	wg *sync.WaitGroup,
+	errStream chan<- error,
+	cp *pipecdv1alpha1.ControlPlane,
+) {
 	defer (*wg).Done()
-	log := r.Log.WithValues("component", "server")
+	log = log.WithValues("component", "server")
 	serverNN := object.MakeServerNamespacedName(cp.Name, cp.Namespace)
 
-	/* Generate server Deployment (NamespacedName) */
+	/* Apply server Deployment */
 	serverDeployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      serverNN.Name,
 			Namespace: serverNN.Namespace,
 		},
 	}
-
-	/* Apply server Deployment */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, serverDeployment, func() (err error) {
 		serverDeployment.Spec, err = object.MakeServerDeploymentSpec(*cp)
 		if err != nil {
@@ -360,7 +376,7 @@ func (r *ControlPlaneReconciler) reconcileServer(ctx context.Context, wg *sync.W
 		}
 		return nil
 	}); err != nil {
-		log.Error(err, "unable to ensure deployment is correct")
+		log.Error(err, "unable to ensure Deployment is correct")
 		errStream <- err
 		return
 	}
@@ -382,19 +398,17 @@ func (r *ControlPlaneReconciler) reconcileServer(ctx context.Context, wg *sync.W
 			errStream <- err
 			return
 		}
-		/* Record to event */
+		// record to event
 		r.Recorder.Eventf(cp, corev1.EventTypeNormal, "Updated", "Update controlPlane.Status.AvailableServerReplicas: %d", cp.Status.AvailableServerReplicas)
 	}
 
-	/* Generate server Service (NamespacedName) */
+	/* Apply server Service */
 	serverService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      serverNN.Name,
 			Namespace: serverNN.Namespace,
 		},
 	}
-
-	/* Apply server Service */
 	if _, err := ctrl.CreateOrUpdate(ctx, r, serverService, func() (err error) {
 		serverService.Spec, err = object.MakeServerServiceSpec(*cp)
 		if err != nil {
@@ -404,7 +418,7 @@ func (r *ControlPlaneReconciler) reconcileServer(ctx context.Context, wg *sync.W
 			log.Error(err, "unable to set ownerReference from ControlPlane to Service")
 			return err
 		}
-		/* Get gateway Service from cluster */
+		// get gateway Service from cluster
 		var serverServiceApplied v1.Service
 		if err := r.Get(ctx, client.ObjectKey{Namespace: serverService.Namespace, Name: serverService.Name}, &serverServiceApplied); err != nil {
 			// if does not exist, skip
@@ -420,9 +434,15 @@ func (r *ControlPlaneReconciler) reconcileServer(ctx context.Context, wg *sync.W
 	}
 }
 
-func (r *ControlPlaneReconciler) reconcileCache(ctx context.Context, wg *sync.WaitGroup, errStream chan<- error, cp *pipecdv1alpha1.ControlPlane) {
+func (r *ControlPlaneReconciler) reconcileCache(
+	ctx context.Context,
+	log logr.Logger,
+	wg *sync.WaitGroup,
+	errStream chan<- error,
+	cp *pipecdv1alpha1.ControlPlane,
+) {
 	defer (*wg).Done()
-	log := r.Log.WithValues("component", "cache")
+	log = log.WithValues("component", "cache")
 	cacheNN := object.MakeCacheNamespacedName(cp.Name, cp.Namespace)
 
 	/* Generate cache Deployment (NamespacedName) */
@@ -445,7 +465,7 @@ func (r *ControlPlaneReconciler) reconcileCache(ctx context.Context, wg *sync.Wa
 		}
 		return nil
 	}); err != nil {
-		log.Error(err, "unable to ensure deployment is correct")
+		log.Error(err, "unable to ensure Deployment is correct")
 		errStream <- err
 		return
 	}
@@ -505,9 +525,15 @@ func (r *ControlPlaneReconciler) reconcileCache(ctx context.Context, wg *sync.Wa
 	}
 }
 
-func (r *ControlPlaneReconciler) reconcileOps(ctx context.Context, wg *sync.WaitGroup, errStream chan<- error, cp *pipecdv1alpha1.ControlPlane) {
+func (r *ControlPlaneReconciler) reconcileOps(
+	ctx context.Context,
+	log logr.Logger,
+	wg *sync.WaitGroup,
+	errStream chan<- error,
+	cp *pipecdv1alpha1.ControlPlane,
+) {
 	defer (*wg).Done()
-	log := r.Log.WithValues("component", "ops")
+	log = log.WithValues("component", "ops")
 	opsNN := object.MakeOpsNamespacedName(cp.Name, cp.Namespace)
 
 	/* Generate ops Deployment (NamespacedName) */
@@ -530,7 +556,7 @@ func (r *ControlPlaneReconciler) reconcileOps(ctx context.Context, wg *sync.Wait
 		}
 		return nil
 	}); err != nil {
-		log.Error(err, "unable to ensure deployment is correct")
+		log.Error(err, "unable to ensure Deployment is correct")
 		errStream <- err
 		return
 	}
@@ -588,4 +614,22 @@ func (r *ControlPlaneReconciler) reconcileOps(ctx context.Context, wg *sync.Wait
 		errStream <- err
 		return
 	}
+}
+
+func (r *ControlPlaneReconciler) reconcileDelete(
+	ctx context.Context,
+	log logr.Logger,
+	cp *pipecdv1alpha1.ControlPlane,
+) (ctrl.Result, error) {
+
+	// remove ControlPlane finalizer from ControlPlane Object
+	controllerutil.RemoveFinalizer(cp, controlPlaneFinalizerName)
+	patch := generatePatchFinalizersObject(cp.GroupVersionKind(), cp.Namespace, cp.Name, cp.ObjectMeta.Finalizers)
+	// TODO: 複数 controller が 1object を操作する場合 server-side apply だと conflict する
+	if err := r.Patch(ctx, patch, client.Apply, &client.PatchOptions{FieldManager: controlPlaneControllerName}); err != nil {
+		log.Error(err, err.Error())
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
 }

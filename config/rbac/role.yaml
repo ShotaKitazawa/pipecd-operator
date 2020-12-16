@@ -9,6 +9,26 @@ rules:
 - apiGroups:
   - pipecd.kanatakita.com
   resources:
+  - applications
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - pipecd.kanatakita.com
+  resources:
+  - applications/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - pipecd.kanatakita.com
+  resources:
   - controlplanes
   verbs:
   - create
