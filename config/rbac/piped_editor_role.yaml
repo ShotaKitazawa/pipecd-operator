@@ -1,0 +1,24 @@
+# permissions for end users to edit pipeds.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: piped-editor-role
+rules:
+- apiGroups:
+  - pipecd.kanatakita.com
+  resources:
+  - pipeds
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - pipecd.kanatakita.com
+  resources:
+  - pipeds/status
+  verbs:
+  - get

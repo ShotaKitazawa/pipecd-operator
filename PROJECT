@@ -1,0 +1,22 @@
+domain: kanatakita.com
+repo: github.com/ShotaKitazawa/pipecd-operator
+resources:
+- group: pipecd
+  kind: ControlPlane
+  version: v1alpha1
+- group: pipecd
+  kind: Mongo
+  version: v1alpha1
+- group: pipecd
+  kind: Minio
+  version: v1alpha1
+- group: pipecd
+  kind: Environment
+  version: v1alpha1
+- group: pipecd
+  kind: Piped
+  version: v1alpha1
+- group: pipecd
+  kind: Application
+  version: v1alpha1
+version: "2"

@@ -1,0 +1,18 @@
+apiVersion: pipecd.kanatakita.com/v1alpha1
+kind: Application
+metadata:
+  name: application-sample
+spec:
+  name: test-application
+  projectID: quickstart
+  kind: Kubernetes
+  environmentRef:
+    objectName: environment-sample
+    name: test-environment
+  pipedRef:
+    objectName: piped-sample
+    name: test-piped
+  repository: example
+  path: kubernetes/canary
+  cloudProvider: kubernetes-default
+  insecure: true

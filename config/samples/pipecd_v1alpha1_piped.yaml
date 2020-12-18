@@ -1,0 +1,24 @@
+apiVersion: pipecd.kanatakita.com/v1alpha1
+kind: Piped
+metadata:
+  name: piped-sample
+spec:
+  version: "v0.9.0"
+  name: test-piped
+  description: test
+  environmentRef:
+    objectName: environment-sample
+    name: test-environment
+  projectID: quickstart
+  insecure: true
+  config:
+    syncInterval: 60
+    #projectID: quickstart
+    #pipedID: ccd1b4a9-533e-4d87-8ecf-eb5796c49f52
+    #pipedKeyFile: /etc/piped-secret/piped-key
+    apiAddress: pipecd:8080
+    webAddress: http://pipecd:8080
+    repositories:
+      - repoId: examples
+        remote: https://github.com/ShotaKitazawa/examples.git
+        branch: master

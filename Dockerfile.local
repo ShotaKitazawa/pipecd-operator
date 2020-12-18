@@ -1,0 +1,8 @@
+# runner
+FROM gcr.io/distroless/static:nonroot
+WORKDIR /
+## copy binary
+COPY manager .
+## Run
+ENTRYPOINT ["/manager"]
+

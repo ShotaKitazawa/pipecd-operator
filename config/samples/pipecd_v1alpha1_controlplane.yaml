@@ -1,0 +1,34 @@
+apiVersion: pipecd.kanatakita.com/v1alpha1
+kind: ControlPlane
+metadata:
+  name: controlplane-sample
+spec:
+  replicas: 1
+  version: "v0.9.0"
+  envoyVersion: "v1.10.0"
+  redisVersion: "5.0.5-alpine3.9"
+  volumeMounts:
+    - mountPath: /mnt/secret
+      volume:
+        name: secret
+        secret:
+          secretName: secret-minio
+  config:
+    datastore:
+      mongoDBConfig:
+        #url: mongodb://pipecd-mongodb:27017/quickstart
+        url: mongodb://mongo-sample-mongo:27017/quickstart
+        database: quickstart
+    filestore:
+      minioConfig:
+        #endpoint: http://pipecd-minio:9000
+        endpoint: http://minio-sample-minio:9000
+        bucket: quickstart
+        accessKeyFile: /mnt/secret/minio-access-key
+        secretKeyFile: /mnt/secret/minio-secret-key
+        autoCreateBucket: true
+    projects:
+      - id: quickstart
+        staticAdmin:
+          username: hello-pipecd
+          passwordHash: "$2a$10$ye96mUqUqTnjUqgwQJbJzel/LJibRhUnmzyypACkvrTSnQpVFZ7qK" # bcrypt value of "hello-pipecd"

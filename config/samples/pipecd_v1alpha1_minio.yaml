@@ -1,0 +1,10 @@
+apiVersion: pipecd.kanatakita.com/v1alpha1
+kind: Minio
+metadata:
+  name: minio-sample
+spec:
+  version: "RELEASE.2020-08-26T00-00-49Z"
+  storage:
+    emptyDir: {}
+  secret:
+    secretName: secret-minio
